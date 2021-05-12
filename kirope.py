@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """kirope.py
 
-Kinematics driven Robot Pose Estimation with Monocular Camera.
+Kinematics Guided Robot Pose Estimation with Monocular Camera.
 
 Hyosung Hong
 """

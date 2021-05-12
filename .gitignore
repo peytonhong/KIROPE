@@ -1,3 +1,4 @@
 annotation/
 results/
 video_capture/
+__pycache__/

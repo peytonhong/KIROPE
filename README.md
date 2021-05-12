@@ -4,7 +4,7 @@ This work is intended to utilize the robot's Kinematics information for articula
 Example1 ~ Example6 are those I have made to learn PyBullet and NVISII for automatic training data generation.
 Those codes are referenced from basic tutorials of PyBullet and NVISII.
 
-The main network comprises Resnet-50 which is used for extracting feature vectors from images, followed by transformer which is well known for handeling sequential data.
+The main network includes Resnet-50 as a backbone for feature extraction from input images, followed by transformer which is well known for handeling sequential data. The output joint 2D keypoint is trained with ground truth keypoint belief maps which has the same size with the input image.
 
 ### Network Architecture
 ![Architecture](https://github.com/peytonhong/kirope/blob/main/docs/network_architecture.png)

@@ -1,4 +1,4 @@
-# Kinematics driven Robot Pose Estimation with Monocular Camera
+# Kinematics Guided Robot Pose Estimation with Monocular Camera
 
 This work is intended to utilize the robot's Kinematics information for articulated robot's joint pose estimation.
 Example1 ~ Example6 are those I have made to learn PyBullet and NVISII for automatic training data generation.

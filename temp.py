@@ -4,7 +4,8 @@ from torch.utils.data import DataLoader
 from dataset_load import RobotDataset
 from PIL import Image
 import torchvision.transforms as T
-
+import matplotlib.pyplot as plt
+from utils.gaussian_position_encoding import gaussian_position_encoding
 
 dataset = RobotDataset()
 image = dataset[0]['image']
@@ -43,3 +44,16 @@ transform = T.Compose([
 image_transform = transform(image)
 # print(image_transform.shape)
 # print('image.size', image.size)
+
+
+
+joint_states = dataset[10]['joint_states']
+print('joint_states: ', joint_states.shape, joint_states)
+
+pos = gaussian_position_encoding(joint_states.numpy())
+
+for i in range(len(pos)):    
+    img = (pos[i]*255).reshape(16,16).astype(np.uint8)
+    cv2.imshow('pos', img)    
+    cv2.waitKey(0)
+

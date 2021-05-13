@@ -2,3 +2,5 @@ annotation/
 results/
 video_capture/
 __pycache__/
+*.png
+*.mp4

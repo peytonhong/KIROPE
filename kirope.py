@@ -92,7 +92,7 @@ class KIROPE(nn.Module):
         # Transformer encoder without positional encoding
         h = self.transformer_encoder(h)  # [625, 1, 256]
         
-        h = self.transformer_decoder(joint_states.unsqueeze(1), h)
+        h = self.transformer_decoder(joint_states.unsqueeze(1).type(torch.FloatTensor), h)
 
 
         # finally project transformer outputs to class labels and bounding boxes

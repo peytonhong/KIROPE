@@ -22,7 +22,8 @@ class RobotDataset(Dataset):
     def __getitem__(self, idx):
         # image = cv2.imread(self.image_paths[idx])
         # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255).astype(np.float32)
-        image = Image.open(self.image_paths[idx]).convert('RGB')
+        image_path = self.image_paths[idx]
+        image = Image.open(image_path).convert('RGB')
 
         with open(self.label_paths[idx]) as json_file:
             label = json.load(json_file)
@@ -30,9 +31,17 @@ class RobotDataset(Dataset):
         joint_velocities = label['objects'][0]['joint_velocities']
         joint_states = torch.tensor((np.stack([joint_angles, joint_velocities], axis=1)))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = self.create_belief_map(image.size, projected_keypoints)        
+        belief_maps = self.create_belief_map(image.size, projected_keypoints)
         
-        sample = {'image': image, 'joint_angles': joint_angles, 'joint_velocities': joint_velocities, 'joint_states': joint_states, 'belief_maps': belief_maps}
+        sample = {
+            'image': image, 
+            'joint_angles': joint_angles, 
+            'joint_velocities': joint_velocities, 
+            'joint_states': joint_states, 
+            'belief_maps': belief_maps, 
+            'projected_keypoints': projected_keypoints,
+            'image_path': image_path
+            }
         return sample
 
 

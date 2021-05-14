@@ -8,6 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from PIL import Image
 import torchvision.transforms as T
+from utils.gaussian_position_encoding import gaussian_position_encoding
 
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
@@ -15,7 +16,14 @@ class RobotDataset(Dataset):
     def __init__(self, data_dir='annotation'):        
         self.image_paths = sorted(glob(os.path.join(data_dir, '*.png')))
         self.label_paths = sorted(glob(os.path.join(data_dir, '*.json')))
-        
+        # standard PyTorch mean-std input image normalization
+        self.image_transform = T.Compose([
+            T.Resize(800),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+
+
     def __len__(self):
         return len(self.image_paths)
 
@@ -31,15 +39,18 @@ class RobotDataset(Dataset):
         joint_velocities = label['objects'][0]['joint_velocities']
         joint_states = torch.tensor((np.stack([joint_angles, joint_velocities], axis=1)))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = self.create_belief_map(image.size, projected_keypoints)
+        belief_maps = torch.tensor(self.create_belief_map(image.size, projected_keypoints))
         
+        keypoint_embeddings = torch.tensor(gaussian_position_encoding(projected_keypoints)).type(torch.FloatTensor)
+
         sample = {
-            'image': image, 
+            'image': self.image_transform(image), 
             'joint_angles': joint_angles, 
             'joint_velocities': joint_velocities, 
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
             'projected_keypoints': projected_keypoints,
+            'keypoint_embeddings': keypoint_embeddings,
             'image_path': image_path
             }
         return sample

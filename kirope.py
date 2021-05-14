@@ -6,12 +6,14 @@ Kinematics Guided Robot Pose Estimation with Monocular Camera. (KIROPE)
 Hyosung Hong
 """
 
+from re import I
 from PIL import Image
 # import requests
 import matplotlib.pyplot as plt
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torchvision.models import resnet50
 import torchvision.transforms as T
 torch.set_grad_enabled(False)
@@ -29,9 +31,11 @@ class KIROPE(nn.Module):
     KIROPE implementation.
 
     """
-    def __init__(self, num_classes, hidden_dim=256, nheads=2,
+    def __init__(self, num_joints, hidden_dim=256, nheads=2,
                  num_encoder_layers=7, num_decoder_layers=7):
         super().__init__()
+
+        self.num_noints = num_joints
 
         # create ResNet-50 backbone
         self.backbone = resnet50()
@@ -54,15 +58,12 @@ class KIROPE(nn.Module):
         # self.linear_class = nn.Linear(hidden_dim, num_classes)
         # self.linear_bbox = nn.Linear(hidden_dim, 4)
 
-        # output positional encodings (object queries)
-        self.query_pos = nn.Parameter(torch.rand(100, hidden_dim))
+        self.fc_out = nn.Linear(in_features=hidden_dim, out_features=20*20) # [1, 7, 400] -> after transpose: [1, 7, 20, 20]
+        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_noints, out_channels=self.num_noints, kernel_size=3, stride=4, padding=1, output_padding=1) # [1, 7, 100, 100]
+        self.dconv2 = nn.ConvTranspose2d(in_channels=self.num_noints, out_channels=self.num_noints, kernel_size=3, stride=4, padding=1, output_padding=1) # [1, 7, 500, 500]
+        
 
-        # spatial positional encodings
-        # note that in baseline DETR we use sine positional encodings
-        self.row_embed = nn.Parameter(torch.rand(50, hidden_dim // 2))
-        self.col_embed = nn.Parameter(torch.rand(50, hidden_dim // 2))
-
-    def forward(self, images, joint_states):
+    def forward(self, images, keypoint_embeddings):
         # propagate inputs through ResNet-50 up to avg-pool layer
         x = self.backbone.conv1(images)
         x = self.backbone.bn1(x)
@@ -77,12 +78,7 @@ class KIROPE(nn.Module):
         # convert from 2048 to 256 feature planes for the transformer
         h = self.conv(x)    # [1, 256, 25, 25]  from original shape [1, 3, 800, 800] : feature size reduced by 1/32
         
-        # construct positional encodings
-        H, W = h.shape[-2:]
-        pos = torch.cat([    
-            self.col_embed[:W].unsqueeze(0).repeat(H, 1, 1),    # [H, W, 128]
-            self.row_embed[:H].unsqueeze(1).repeat(1, W, 1),    # [H, W, 128]
-        ], dim=-1).flatten(0, 1).unsqueeze(1)                   # [H*W, 1, 256] == [850, 1, 256]
+        
         
         # propagate through the transformer
         # h = self.transformer(pos + 0.1 * h.flatten(2).permute(2, 0, 1),     # [H*W, 1, 256] == [850, 1, 256]
@@ -91,27 +87,15 @@ class KIROPE(nn.Module):
         h = h.flatten(2).permute(2, 0, 1)
         # Transformer encoder without positional encoding
         h = self.transformer_encoder(h)  # [625, 1, 256]
-        
-        h = self.transformer_decoder(joint_states.unsqueeze(1).type(torch.FloatTensor), h)
+        x = self.transformer_decoder(keypoint_embeddings.unsqueeze(1), h) # [7, 1, 256]
 
+        x = x.transpose(1, 0, 2) # [1, 7, 256]
+        x = self.fc_out(x)
+        x = F.relu(self.dconv1(x))
+        x = F.relu(self.dconv2(x))
 
         # finally project transformer outputs to class labels and bounding boxes
-        return {'pred_belief_maps': h}
-
-"""Let's put everything together in a `detect` function:"""
-def detect(im, joint_states, model, transform):
-    # mean-std normalize the input image (batch-size: 1)
-    img = transform(im).unsqueeze(0) # [1, 3, 800, 1066] image resize from transform function
-    
-    # demo model only support by default images with aspect ratio between 0.5 and 2
-    # if you want to use images with an aspect ratio outside this range
-    # rescale your image so that the maximum size is at most 1333 for best results
-    assert img.shape[-2] <= 1600 and img.shape[-1] <= 1600, 'demo model only supports images up to 1600 pixels on each side'
-
-    # propagate through the model
-    outputs = model(img, joint_states)
-
-    return outputs
+        return {'pred_belief_maps': x}
 
 
 """
@@ -120,7 +104,9 @@ There are two main components:
 * a Transformer - we use the default PyTorch nn.TransformerEncoder, nn.TransformerDecoder
 """
 
-model = KIROPE(num_classes=7)
+hidden_dim=256
+
+model = KIROPE(num_classes=7, hidden_dim=hidden_dim)
 # state_dict = torch.hub.load_state_dict_from_url(
 #     url='https://dl.fbaipublicfiles.com/detr/detr_demo-da2a99e9.pth',
 #     map_location='cpu', check_hash=True)
@@ -142,14 +128,26 @@ transform = T.Compose([
 idx = 0
 
 robot_dataset = RobotDataset()
+
 image = robot_dataset[idx]['image']
-joint_states = robot_dataset[idx]['joint_states']
+# joint_states = robot_dataset[idx]['joint_states']
+keypoint_embeddings = robot_dataset[idx]['keypoint_embeddings'] # [num_joints, hiddem_dim] [7, 256]
 belief_map = robot_dataset[idx]['belief_maps']
 
-train_iterator = DataLoader(dataset=robot_dataset, batch_size=4, shuffle=False)
+train_iterator = DataLoader(dataset=robot_dataset, batch_size=1, shuffle=False)
 
-# pil_img = Image.fromarray(image) # [500, 500]
+for i, sampled_batch in enumerate(train_iterator):
+    image = sampled_batch['image'] # tensor [N, 3, 800, 800]
+    joint_angles = sampled_batch['joint_angles'] 
+    joint_velocities = sampled_batch['joint_velocities']
+    joint_states = sampled_batch['joint_states'] # [N, 7, 2]
+    belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
+    projected_keypoints = sampled_batch['projected_keypoints']
+    keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 256]
+    image_path = sampled_batch['image_path']
+    
+    break
 
-result = detect(image, joint_states, model, transform)
+result = model(image, keypoint_embeddings)
 
-print(result['pred_belief_maps'])
+print(result['pred_belief_maps'].shape)

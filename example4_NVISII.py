@@ -54,7 +54,7 @@ nvisii.set_camera_entity(camera)
 # cam_proj_matrix = nvisii.entity.get('camera').get_camera().get_projection()
 cam_proj_matrix = camera.get_camera().get_projection()
 print(cam_proj_matrix)
-exit(0)
+# exit(0)
 # Setup bullet physics stuff
 seconds_per_step = 1.0 / 240.0
 frames_per_second = 30.0

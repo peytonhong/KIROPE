@@ -2,5 +2,6 @@ annotation/
 results/
 video_capture/
 __pycache__/
+checkpoints/
 *.png
 *.mp4

@@ -4,8 +4,8 @@ from glob import glob
 import os
 import cv2
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
+from torch.utils.data import Dataset
+
 from PIL import Image
 import torchvision.transforms as T
 from utils.gaussian_position_encoding import gaussian_position_encoding
@@ -39,7 +39,7 @@ class RobotDataset(Dataset):
         joint_velocities = label['objects'][0]['joint_velocities']
         joint_states = torch.tensor((np.stack([joint_angles, joint_velocities], axis=1)))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = torch.tensor(self.create_belief_map(image.size, projected_keypoints))
+        belief_maps = torch.tensor(self.create_belief_map(image.size, projected_keypoints)).type(torch.FloatTensor).transpose(1, 2) # [w,h] to [h,w]
         
         keypoint_embeddings = torch.tensor(gaussian_position_encoding(projected_keypoints)).type(torch.FloatTensor)
 

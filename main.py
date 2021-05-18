@@ -38,7 +38,7 @@ def argparse_args():
   parser = argparse.ArgumentParser(description=desc)
   parser.add_argument('command', help="'train' or 'evaluate'")
   parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
-  parser.add_argument('--batch_size', default=4, type=int, help="The number of batchs for each epoch")
+  parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -64,8 +64,8 @@ def train(args, model, dataset, device, optimizer):
 
         image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        # output = model(image, keypoint_embeddings)
-        output = model(image)
+        output = model(image, keypoint_embeddings)
+        # output = model(image)
         loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         loss.backward()
         train_loss_sum += loss.item()*len(sampled_batch)
@@ -95,8 +95,8 @@ def test(args, model, dataset, device):
 
             image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
             
-            # output = model(image, keypoint_embeddings)
-            output = model(image)
+            output = model(image, keypoint_embeddings)
+            # output = model(image)
             
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
             
@@ -115,7 +115,7 @@ def extract_keypoints_from_belief_maps(belief_maps):
     keypoints = []
     for i in range(len(belief_maps[0])):
         indices = np.where(belief_maps[0][i] == belief_maps[0][i].max())
-        keypoints.append([indices[1][0], indices[0][0]]) 
+        keypoints.append([indices[1][0], indices[0][0]]) # keypoint format: [w, h]
         # print(belief_maps[0][i].max())
         
     return keypoints
@@ -131,10 +131,10 @@ def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
     bgr_colors = rgb_colors[:, ::-1]
     image = cv2.imread(image_paths[0])
-    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps.transpose(0,1,3,2))    # torch:[h, w] -> cv2:[w, h] 
-    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps.transpose(0,1,3,2))        # torch:[h, w] -> cv2:[w, h] 
-    save_belief_map_images(pred_belief_maps.transpose(0,1,3,2), 'pred')
-    save_belief_map_images(gt_belief_maps.transpose(0,1,3,2), 'gt')
+    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps)     
+    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
+    save_belief_map_images(pred_belief_maps, 'pred')
+    save_belief_map_images(gt_belief_maps, 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
@@ -157,8 +157,8 @@ def main(args):
     hidden_dim = 256 # fixed for keypoint embiddings
     lr = 1.5e-4           # learning rate
 
-    # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
-    model = ResnetSimple()
+    model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
+    # model = ResnetSimple()
 
     if torch.cuda.is_available(): # for multi gpu compatibility
         device = 'cuda'        

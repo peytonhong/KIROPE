@@ -28,20 +28,20 @@ class RobotDataset(Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        # image = cv2.imread(self.image_paths[idx])
-        # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255).astype(np.float32)
+        # image = cv2.imread(self.image_paths[idx]) # [h, w, c(BGR)]
+        # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).astype(np.float32)
         image_path = self.image_paths[idx]
-        image = Image.open(image_path).convert('RGB')
+        image = Image.open(image_path).convert('RGB') # [w, h]
 
         with open(self.label_paths[idx]) as json_file:
             label = json.load(json_file)
         joint_angles = label['objects'][0]['joint_angles']
         joint_velocities = label['objects'][0]['joint_velocities']
-        joint_states = torch.tensor((np.stack([joint_angles, joint_velocities], axis=1)))
+        joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = torch.tensor(self.create_belief_map(image.size, projected_keypoints)).type(torch.FloatTensor).transpose(1, 2) # [w,h] to [h,w]
-        
-        keypoint_embeddings = torch.tensor(gaussian_position_encoding(projected_keypoints)).type(torch.FloatTensor)
+        belief_maps = torch.tensor(self.create_belief_map(image.size[::-1], projected_keypoints)).type(torch.FloatTensor) # [h,w]
+
+        keypoint_embeddings = torch.tensor(gaussian_position_encoding(joint_states)).type(torch.FloatTensor)
 
         sample = {
             'image': self.image_transform(image), 
@@ -76,16 +76,15 @@ class RobotDataset(Dataset):
         ), 'Expected "image_resolution" to have length 2, but it has length {}.'.format(
             len(image_resolution)
         )
-        image_width, image_height = image_resolution
-        image_transpose_resolution = (image_height, image_width)
+        image_height, image_width = image_resolution
         out = np.zeros((len(pointsBelief), image_height, image_width))
 
         w = int(sigma * 2)
 
         for i_point, point in enumerate(pointsBelief):
-            pixel_u = int(point[0])
-            pixel_v = int(point[1])
-            array = np.zeros(image_transpose_resolution)
+            pixel_u = int(point[0]) # width axis
+            pixel_v = int(point[1]) # height axis
+            array = np.zeros((image_height, image_width))
 
             # TODO makes this dynamics so that 0,0 would generate a belief map.
             if (

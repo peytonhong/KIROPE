@@ -104,10 +104,45 @@ class KIROPE_Transformer(nn.Module):
         self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_decoder_layers)
 
         self.fc_out = nn.Linear(in_features=hidden_dim, out_features=25*25) # [1, 7, 625] -> after reshape: [1, 7, 25, 25]
-        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=64, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 64, 125, 125] (x5)
-        self.dconv2 = nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 32, 250, 250] (x2)
-        self.dconv3 = nn.ConvTranspose2d(in_channels=32, out_channels=7, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 7, 500, 500] (x2)
-        
+        # self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=64, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 64, 125, 125] (x5)
+        # self.dconv2 = nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 32, 250, 250] (x2)
+        # self.dconv3 = nn.ConvTranspose2d(in_channels=32, out_channels=7, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 7, 500, 500] (x2)
+        # upconvolution and final layer
+        BN_MOMENTUM = 0.1
+
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(
+                in_channels=7,
+                out_channels=256,
+                kernel_size=5,
+                stride=5,
+                padding=0,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, num_joints, kernel_size=1, stride=1),
+        )
 
     def forward(self, images, keypoint_embeddings):
         # propagate inputs through ResNet-50 up to avg-pool layer
@@ -139,8 +174,9 @@ class KIROPE_Transformer(nn.Module):
         
         x = self.fc_out(x) # [1, 7, 20, 20]
         x = x.reshape(-1, self.num_joints, 25, 25)
-        x = F.relu(self.dconv1(x))
-        x = F.relu(self.dconv2(x))
-        x = self.dconv3(x)
+        # x = F.relu(self.dconv1(x))
+        # x = F.relu(self.dconv2(x))
+        # x = self.dconv3(x)
+        x = self.upsample(x)
         # finally project transformer outputs to class labels and bounding boxes
         return {'pred_belief_maps': x}

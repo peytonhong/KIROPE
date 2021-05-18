@@ -38,7 +38,7 @@ def argparse_args():
   parser = argparse.ArgumentParser(description=desc)
   parser.add_argument('command', help="'train' or 'evaluate'")
   parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
-  parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
+  parser.add_argument('--batch_size', default=4, type=int, help="The number of batchs for each epoch")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -153,15 +153,19 @@ def main(args):
     * a convolutional backbone - we use ResNet-50
     * a Transformer - we use the default PyTorch nn.TransformerEncoder, nn.TransformerDecoder
     """
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # device = torch.device('cpu')
     
     hidden_dim = 256 # fixed for keypoint embiddings
     lr = 1.5e-4           # learning rate
 
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
     model = ResnetSimple()
-    model = nn.DataParallel(model).to(device)
+
+    if torch.cuda.is_available(): # for multi gpu compatibility
+        device = 'cuda'        
+        model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device) 
+    else:
+        device = 'cpu'
+        model = nn.DataParallel(model).to(device)
     # print(model)
 
     # for param in model.module.backbone.parameters():

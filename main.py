@@ -37,8 +37,8 @@ def argparse_args():
   desc = "Pytorch implementation of 'Kinematics Guided Robot Pose Estimation with Monocular Camera (KIROPE)'"
   parser = argparse.ArgumentParser(description=desc)
   parser.add_argument('command', help="'train' or 'evaluate'")
-  parser.add_argument('--num_epochs', default=500, type=int, help="The number of epochs to run")
-  parser.add_argument('--batch_size', default=25, type=int, help="The number of batchs for each epoch")
+  parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
+  parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -159,10 +159,10 @@ def main(args):
 
     model = KIROPE(num_joints=7, hidden_dim=hidden_dim)
     model = nn.DataParallel(model).to(device)
-    print(model)
+    # print(model)
 
-    for param in model.module.backbone.parameters():
-        param.requires_grad = False
+    # for param in model.module.backbone.parameters():
+    #     param.requires_grad = False
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 

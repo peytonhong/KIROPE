@@ -29,9 +29,10 @@ class KIROPE(nn.Module):
         decoder_layer = nn.TransformerDecoderLayer(hidden_dim, nheads)
         self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_decoder_layers)
 
-        self.fc_out = nn.Linear(in_features=hidden_dim, out_features=20*20) # [1, 7, 400] -> after reshape: [1, 7, 20, 20]
-        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=self.num_joints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 100, 100]
-        self.dconv2 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=self.num_joints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 500, 500]
+        self.fc_out = nn.Linear(in_features=hidden_dim, out_features=25*25) # [1, 7, 625] -> after reshape: [1, 7, 25, 25]
+        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=64, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 64, 125, 125] (x5)
+        self.dconv2 = nn.ConvTranspose2d(in_channels=64, out_channels=32, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 32, 250, 250] (x2)
+        self.dconv3 = nn.ConvTranspose2d(in_channels=32, out_channels=7, kernel_size=3, stride=2, padding=1, output_padding=1) # [1, 7, 500, 500] (x2)
         
 
     def forward(self, images, keypoint_embeddings):
@@ -63,8 +64,9 @@ class KIROPE(nn.Module):
         x = x.transpose(0, 1) # [1, 7, 256]
         
         x = self.fc_out(x) # [1, 7, 20, 20]
-        x = x.reshape(-1, self.num_joints, 20, 20)
+        x = x.reshape(-1, self.num_joints, 25, 25)
         x = F.relu(self.dconv1(x))
-        x = self.dconv2(x)
+        x = F.relu(self.dconv2(x))
+        x = self.dconv3(x)
         # finally project transformer outputs to class labels and bounding boxes
         return {'pred_belief_maps': x}

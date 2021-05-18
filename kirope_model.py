@@ -1,9 +1,83 @@
-from torchvision.models import resnet50
+from torchvision.models import resnet50, resnet101
 from torch import nn
 import torch.nn.functional as F
 
 
-class KIROPE(nn.Module):
+class ResnetSimple(nn.Module):
+    def __init__(self, n_keypoints=7, pretrained=True):
+        super(ResnetSimple, self).__init__()
+        net = resnet50(pretrained=pretrained)
+        self.conv1 = net.conv1
+        self.bn1 = net.bn1
+        self.relu = net.relu
+        self.maxpool = net.maxpool
+
+        self.layer1 = net.layer1
+        self.layer2 = net.layer2
+        self.layer3 = net.layer3
+        self.layer4 = net.layer4
+
+
+        # upconvolution and final layer
+        BN_MOMENTUM = 0.1
+
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(
+                in_channels=2048,
+                out_channels=256,
+                kernel_size=5,
+                stride=5,
+                padding=0,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, n_keypoints, kernel_size=1, stride=1),
+        )
+
+    def forward(self, x):
+
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        
+        x = self.upsample(x)
+
+
+        return {'pred_belief_maps': x}
+
+
+
+
+
+
+class KIROPE_Transformer(nn.Module):
     """
     KIROPE implementation.
 

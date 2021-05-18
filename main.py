@@ -18,7 +18,7 @@ import cv2
 # import matplotlib.pyplot as plt
 from tqdm import tqdm
 from dataset_load import RobotDataset
-from kirope_model import KIROPE
+from kirope_model import KIROPE_Transformer, ResnetSimple
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -64,8 +64,8 @@ def train(args, model, dataset, device, optimizer):
 
         image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        output = model(image, keypoint_embeddings)
-        
+        # output = model(image, keypoint_embeddings)
+        output = model(image)
         loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         loss.backward()
         train_loss_sum += loss.item()*len(sampled_batch)
@@ -95,7 +95,8 @@ def test(args, model, dataset, device):
 
             image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
             
-            output = model(image, keypoint_embeddings)
+            # output = model(image, keypoint_embeddings)
+            output = model(image)
             
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
             
@@ -119,11 +120,11 @@ def extract_keypoints_from_belief_maps(belief_maps):
         
     return keypoints
 
-def save_belief_map_images(belief_maps):
+def save_belief_map_images(belief_maps, map_type):
     belief_maps = (belief_maps[0]*255).astype(np.uint8)
     for i in range(len(belief_maps)):        
         image = cv2.cvtColor(belief_maps[i].copy(), cv2.COLOR_GRAY2RGB)
-        cv2.imwrite(f'visualize_belief_maps_{i}.png', image)
+        cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)
 
 def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
     # visualize the joint position prediction wih ground truth
@@ -132,7 +133,8 @@ def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
     image = cv2.imread(image_paths[0])
     pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps.transpose(0,1,3,2))    # torch:[h, w] -> cv2:[w, h] 
     gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps.transpose(0,1,3,2))        # torch:[h, w] -> cv2:[w, h] 
-    save_belief_map_images(pred_belief_maps.transpose(0,1,3,2))
+    save_belief_map_images(pred_belief_maps.transpose(0,1,3,2), 'pred')
+    save_belief_map_images(gt_belief_maps.transpose(0,1,3,2), 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
@@ -157,7 +159,8 @@ def main(args):
     hidden_dim = 256 # fixed for keypoint embiddings
     lr = 1.5e-4           # learning rate
 
-    model = KIROPE(num_joints=7, hidden_dim=hidden_dim)
+    # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
+    model = ResnetSimple()
     model = nn.DataParallel(model).to(device)
     # print(model)
 

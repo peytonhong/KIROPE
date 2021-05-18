@@ -12,7 +12,7 @@ class KIROPE(nn.Module):
                  num_encoder_layers=7, num_decoder_layers=7):
         super().__init__()
 
-        self.num_noints = num_joints
+        self.num_joints = num_joints
 
         # create ResNet-50 backbone
         self.backbone = resnet50(pretrained=True)
@@ -30,8 +30,8 @@ class KIROPE(nn.Module):
         self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_decoder_layers)
 
         self.fc_out = nn.Linear(in_features=hidden_dim, out_features=20*20) # [1, 7, 400] -> after reshape: [1, 7, 20, 20]
-        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_noints, out_channels=self.num_noints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 100, 100]
-        self.dconv2 = nn.ConvTranspose2d(in_channels=self.num_noints, out_channels=self.num_noints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 500, 500]
+        self.dconv1 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=self.num_joints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 100, 100]
+        self.dconv2 = nn.ConvTranspose2d(in_channels=self.num_joints, out_channels=self.num_joints, kernel_size=5, stride=5, padding=0, output_padding=0) # [1, 7, 500, 500]
         
 
     def forward(self, images, keypoint_embeddings):
@@ -63,7 +63,7 @@ class KIROPE(nn.Module):
         x = x.transpose(0, 1) # [1, 7, 256]
         
         x = self.fc_out(x) # [1, 7, 20, 20]
-        x = x.reshape(-1, self.num_noints, 20, 20)
+        x = x.reshape(-1, self.num_joints, 20, 20)
         x = F.relu(self.dconv1(x))
         x = self.dconv2(x)
         # finally project transformer outputs to class labels and bounding boxes

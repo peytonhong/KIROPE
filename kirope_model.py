@@ -53,7 +53,7 @@ class ResnetSimple(nn.Module):
             nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, n_keypoints, kernel_size=1, stride=1),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -143,6 +143,7 @@ class KIROPE_Transformer(nn.Module):
             nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=True),
             nn.Conv2d(256, num_joints, kernel_size=1, stride=1),
+            nn.Sigmoid(),
         )
 
     def forward(self, images, keypoint_embeddings):

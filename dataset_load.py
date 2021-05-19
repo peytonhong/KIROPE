@@ -37,6 +37,7 @@ class RobotDataset(Dataset):
             label = json.load(json_file)
         joint_angles = label['objects'][0]['joint_angles']
         joint_velocities = label['objects'][0]['joint_velocities']
+        joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
         belief_maps = torch.tensor(self.create_belief_map(image.size[::-1], projected_keypoints)).type(torch.FloatTensor) # [h,w]

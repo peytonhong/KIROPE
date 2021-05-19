@@ -7,7 +7,8 @@ class ResnetSimple(nn.Module):
     def __init__(self, n_keypoints=7, pretrained=True):
         super(ResnetSimple, self).__init__()
         net = resnet50(pretrained=pretrained)
-        self.conv1 = net.conv1
+        # self.conv1 = net.conv1
+        self.conv1 = nn.Conv2d(10, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = net.bn1
         self.relu = net.relu
         self.maxpool = net.maxpool

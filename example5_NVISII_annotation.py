@@ -17,7 +17,7 @@ opt.width = 500
 opt.height = 500 
 opt.noise = False
 opt.frame_freq = 8
-opt.nb_frames = 10000
+opt.nb_frames = 1000
 opt.outf = 'annotation'
 
 make_joint_sphere = False

@@ -18,10 +18,11 @@ class RobotDataset(Dataset):
         self.label_paths = sorted(glob(os.path.join(data_dir, '*.json')))
         # standard PyTorch mean-std input image normalization
         self.image_transform = T.Compose([
-            T.Resize(800),
+            # T.Resize(800),
             T.ToTensor(),
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
+        self.image_resize = T.Resize(800)
 
 
     def __len__(self):
@@ -32,7 +33,7 @@ class RobotDataset(Dataset):
         # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).astype(np.float32)
         image_path = self.image_paths[idx]
         image = Image.open(image_path).convert('RGB') # [w, h]
-
+        image = self.image_transform(image)
         with open(self.label_paths[idx]) as json_file:
             label = json.load(json_file)
         joint_angles = label['objects'][0]['joint_angles']
@@ -40,19 +41,22 @@ class RobotDataset(Dataset):
         joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = torch.tensor(self.create_belief_map(image.size[::-1], projected_keypoints)).type(torch.FloatTensor) # [h,w]
-
-        keypoint_embeddings = torch.tensor(gaussian_position_encoding(joint_states)).type(torch.FloatTensor)
+        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
+        keypoint_embeddings = torch.tensor(gaussian_position_encoding(joint_states)).type(torch.FloatTensor) # [7, 10000]
+        
+        image = self.image_resize(image)
+        stacked_images = torch.cat((image, self.image_resize(keypoint_embeddings.reshape(7, 100, 100))), dim=0) # [10, 800, 800]        
 
         sample = {
-            'image': self.image_transform(image), 
+            'image': image, 
             'joint_angles': joint_angles, 
             'joint_velocities': joint_velocities, 
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
             'projected_keypoints': projected_keypoints,
             'keypoint_embeddings': keypoint_embeddings,
-            'image_path': image_path
+            'image_path': image_path,
+            'stacked_images': stacked_images,
             }
         return sample
 

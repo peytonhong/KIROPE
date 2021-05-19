@@ -51,7 +51,7 @@ def train(args, model, dataset, device, optimizer):
 
     train_loss_sum = 0
     num_trained_data = 0
-
+    weights = [1.0, 1.2, 1.5, 1.9, 2.4, 3.0, 3.7]
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
         keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 256]
@@ -66,7 +66,15 @@ def train(args, model, dataset, device, optimizer):
         optimizer.zero_grad()
         output = model(image, keypoint_embeddings)
         # output = model(image)
-        loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
+        # loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
+        loss_0 = (F.mse_loss(output['pred_belief_maps'][:,0], gt_belief_maps[:,0]))*weights[0] # weighted loss by joints
+        loss_1 = (F.mse_loss(output['pred_belief_maps'][:,1], gt_belief_maps[:,1]))*weights[1] # weighted loss by joints
+        loss_2 = (F.mse_loss(output['pred_belief_maps'][:,2], gt_belief_maps[:,2]))*weights[2] # weighted loss by joints
+        loss_3 = (F.mse_loss(output['pred_belief_maps'][:,3], gt_belief_maps[:,3]))*weights[3] # weighted loss by joints
+        loss_4 = (F.mse_loss(output['pred_belief_maps'][:,4], gt_belief_maps[:,4]))*weights[4] # weighted loss by joints
+        loss_5 = (F.mse_loss(output['pred_belief_maps'][:,5], gt_belief_maps[:,5]))*weights[5] # weighted loss by joints
+        loss_6 = (F.mse_loss(output['pred_belief_maps'][:,6], gt_belief_maps[:,6]))*weights[6] # weighted loss by joints
+        loss = loss_0 + loss_1 + loss_2 + loss_3 + loss_4 + loss_5 + loss_6
         loss.backward()
         train_loss_sum += loss.item()*len(sampled_batch)
         num_trained_data += len(sampled_batch)
@@ -98,7 +106,15 @@ def test(args, model, dataset, device):
             output = model(image, keypoint_embeddings)
             # output = model(image)
             
-            loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
+            # loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
+            loss_0 = (F.mse_loss(output['pred_belief_maps'][:,0], gt_belief_maps[:,0]))*weights[0] # weighted loss by joints
+            loss_1 = (F.mse_loss(output['pred_belief_maps'][:,1], gt_belief_maps[:,1]))*weights[1] # weighted loss by joints
+            loss_2 = (F.mse_loss(output['pred_belief_maps'][:,2], gt_belief_maps[:,2]))*weights[2] # weighted loss by joints
+            loss_3 = (F.mse_loss(output['pred_belief_maps'][:,3], gt_belief_maps[:,3]))*weights[3] # weighted loss by joints
+            loss_4 = (F.mse_loss(output['pred_belief_maps'][:,4], gt_belief_maps[:,4]))*weights[4] # weighted loss by joints
+            loss_5 = (F.mse_loss(output['pred_belief_maps'][:,5], gt_belief_maps[:,5]))*weights[5] # weighted loss by joints
+            loss_6 = (F.mse_loss(output['pred_belief_maps'][:,6], gt_belief_maps[:,6]))*weights[6] # weighted loss by joints
+            loss = loss_0 + loss_1 + loss_2 + loss_3 + loss_4 + loss_5 + loss_6
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)

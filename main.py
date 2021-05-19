@@ -51,7 +51,7 @@ def train(args, model, dataset, device, optimizer):
 
     train_loss_sum = 0
     num_trained_data = 0
-    weights = [1.0, 1.2, 1.5, 1.9, 2.4, 3.0, 3.7]
+    weights = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
     weights = np.array(weights)/np.sum(weights) # normalize
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]

@@ -121,7 +121,7 @@ def extract_keypoints_from_belief_maps(belief_maps):
     return keypoints
 
 def save_belief_map_images(belief_maps, map_type):
-    belief_maps = (belief_maps[0]*255).astype(np.uint8)
+    belief_maps = (belief_maps[0]*255).astype(np.uint8)    
     for i in range(len(belief_maps)):        
         image = cv2.cvtColor(belief_maps[i].copy(), cv2.COLOR_GRAY2RGB)
         cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)

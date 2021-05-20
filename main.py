@@ -115,6 +115,7 @@ def test(args, model, dataset, device):
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
             
+            
         visualize_result(image_path, output['pred_belief_maps'].cpu().numpy(), gt_belief_maps.cpu().numpy())
             
         
@@ -133,7 +134,8 @@ def extract_keypoints_from_belief_maps(belief_maps):
     return keypoints
 
 def save_belief_map_images(belief_maps, map_type):
-    belief_maps = (belief_maps[0]*255).astype(np.uint8)    
+    # belief_maps: [7, h, w]
+    belief_maps = (belief_maps*255).astype(np.uint8)    
     for i in range(len(belief_maps)):        
         image = cv2.cvtColor(belief_maps[i].copy(), cv2.COLOR_GRAY2RGB)
         cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)

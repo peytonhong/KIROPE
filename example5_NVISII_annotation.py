@@ -17,8 +17,8 @@ opt.width = 500
 opt.height = 500 
 opt.noise = False
 opt.frame_freq = 8
-opt.nb_frames = 1000
-opt.outf = 'annotation'
+opt.nb_frames = 10000
+opt.outf = 'annotation/train'
 
 make_joint_sphere = False
 
@@ -402,6 +402,8 @@ for i in tqdm(range(int(opt.nb_frames))):
 
         # robot joint pose setting
         t += dt
+        if i%100 == 0: # refresh frequencies at every 100 frames
+            freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
         targetJointPoses = [clamping(lower_limit[k], signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
 
         for l in range(numJoints):

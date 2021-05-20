@@ -3,6 +3,7 @@ results/
 video_capture/
 __pycache__/
 checkpoints/
+joint_alignment/
 *.png
 *.mp4
 *.zip

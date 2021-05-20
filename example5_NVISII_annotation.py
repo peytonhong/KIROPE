@@ -37,7 +37,7 @@ def create_joint_markers(joint_entiies, jointPositions):
         joint_entiies[i_p].get_material().set_base_color((0.1,0.9,0.08))  
         joint_entiies[i_p].get_material().set_roughness(0.7) 
 
-def get_joint_keypoints(jointPositions, camera_name = 'camera'):
+def get_joint_keypoints(jointPositions, width, height, camera_name = 'camera'):
     """
     reproject the 3d points into the image space for a given object. 
     It assumes you already added the cuboid to the object 
@@ -51,7 +51,7 @@ def get_joint_keypoints(jointPositions, camera_name = 'camera'):
     cam_matrix = nvisii.entity.get(camera_name).get_transform().get_world_to_local_matrix()
     cam_proj_matrix = nvisii.entity.get(camera_name).get_camera().get_projection()
 
-    points = []
+    keypoints = []
     points_cam = []
     for j in range(len(jointPositions)):        
         pos_m = nvisii.vec4(
@@ -66,9 +66,9 @@ def get_joint_keypoints(jointPositions, camera_name = 'camera'):
         p_image = nvisii.vec2(p_image) / p_image.w        
         p_image = p_image * nvisii.vec2(1,-1)        
         p_image = (p_image + nvisii.vec2(1,1)) * 0.5
-        points.append([p_image[0],p_image[1]])
-        points_cam.append([p_cam[0],p_cam[1],p_cam[2]])
-    return points, points_cam
+        keypoints.append([p_image[0]*width, p_image[1]*height])
+        points_cam.append([p_cam[0],p_cam[1],p_cam[2]])        
+    return keypoints, points_cam
 
 def export_to_ndds_file(
     filename = "tmp.json", #this has to include path as well
@@ -167,7 +167,7 @@ def export_to_ndds_file(
                 "objects" : []
             }
 
-    projected_keypoints, _ = get_joint_keypoints(jointPositions, camera_name=camera_name)
+    projected_keypoints, _ = get_joint_keypoints(jointPositions, opt.width, opt.height, camera_name=camera_name)
 
     # put them in the image space. 
     for i_p, p in enumerate(projected_keypoints):

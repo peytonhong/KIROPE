@@ -13,7 +13,7 @@ from utils.gaussian_position_encoding import gaussian_position_encoding
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
 
-    def __init__(self, data_dir='annotation'):        
+    def __init__(self, data_dir='annotation/train'):        
         self.image_paths = sorted(glob(os.path.join(data_dir, '*.png')))
         self.label_paths = sorted(glob(os.path.join(data_dir, '*.json')))
         # standard PyTorch mean-std input image normalization

@@ -115,8 +115,8 @@ def test(args, model, dataset, device):
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
             
-            visualize_result(image_path, output['pred_belief_maps'].cpu().numpy(), gt_belief_maps.cpu().numpy())
-            break
+        visualize_result(image_path, output['pred_belief_maps'].cpu().numpy(), gt_belief_maps.cpu().numpy())
+            
         
         test_loss_sum /= num_tested_data
 
@@ -125,8 +125,8 @@ def test(args, model, dataset, device):
 
 def extract_keypoints_from_belief_maps(belief_maps):    
     keypoints = []
-    for i in range(len(belief_maps[0])):
-        indices = np.where(belief_maps[0][i] == belief_maps[0][i].max())
+    for i in range(len(belief_maps)):
+        indices = np.where(belief_maps[i] == belief_maps[i].max())
         keypoints.append([indices[1][0], indices[0][0]]) # keypoint format: [w, h]
         # print(belief_maps[0][i].max())
         
@@ -139,14 +139,14 @@ def save_belief_map_images(belief_maps, map_type):
         cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)
 
 def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
-    # visualize the joint position prediction wih ground truth
+    # visualize the joint position prediction wih ground truth for one sample
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
     bgr_colors = rgb_colors[:, ::-1]
     image = cv2.imread(image_paths[0])
-    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps)     
-    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
-    save_belief_map_images(pred_belief_maps, 'pred')
-    save_belief_map_images(gt_belief_maps, 'gt')
+    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps[0])     
+    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps[0])         
+    save_belief_map_images(pred_belief_maps[0], 'pred')
+    save_belief_map_images(gt_belief_maps[0], 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
@@ -185,8 +185,10 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    robot_dataset = RobotDataset()
-    train_iterator = DataLoader(dataset=robot_dataset, batch_size=args.batch_size, shuffle=True)
+    train_dataset = RobotDataset(data_dir='annotation/train')
+    test_dataset = RobotDataset(data_dir='annotation/test')
+    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
+    test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=True)
 
     if args.command == 'train':
         # CHECKPOINT_DIR
@@ -199,15 +201,15 @@ def main(args):
         best_test_loss = float('inf')
         
         for e in range(args.num_epochs):
-            train_loss = train(args, model, train_iterator, device, optimizer)
-            summary_note = f'Epoch: {e:3d}, Train Loss: {train_loss:.10f}'
+            train_loss = train(args, model, train_iterator, device, optimizer)           
+            test_loss = test(args, model, train_iterator, device) # include visulaization result checking
+            summary_note = f'Epoch: {e:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
-
-            if best_test_loss > train_loss:
-                best_test_loss = train_loss
+            if best_test_loss > test_loss:
+                best_test_loss = test_loss
                 torch.save(model, './checkpoints/model_best.pth.tar')
 
-            test_loss = test(args, model, train_iterator, device) # for visulaization result checking
+            
 
     else: # evaluate mode
         model = torch.load('./checkpoints/model_best.pth.tar')

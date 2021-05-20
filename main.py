@@ -202,7 +202,7 @@ def main(args):
         
         for e in range(args.num_epochs):
             train_loss = train(args, model, train_iterator, device, optimizer)           
-            test_loss = test(args, model, train_iterator, device) # include visulaization result checking
+            test_loss = test(args, model, test_iterator, device) # include visulaization result checking
             summary_note = f'Epoch: {e:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
             if best_test_loss > test_loss:

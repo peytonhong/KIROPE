@@ -10,6 +10,7 @@ import numpy as np
 import simplejson as json
 from tqdm import tqdm
 from glob import glob
+import cv2
 
 opt = lambda : None
 # opt.nb_objects = 2
@@ -21,7 +22,7 @@ opt.frame_freq = 8
 opt.nb_frames = 10000
 opt.inputf = 'annotation/test'
 opt.outf = 'joint_alignment'
-opt.idx = 66
+opt.idx = 999
 
 make_joint_sphere = False
 
@@ -36,6 +37,20 @@ else:
     print(f'created folder {opt.outf}/')
     
 # # # # # # # # # # # # # # # # # # # # # # # # #
+
+def save_keypoint_visualize_image(iter_image_path, target_image_path, iter_keypoints, target_keypoints, iter):
+    rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
+    bgr_colors = rgb_colors[:, ::-1]
+    iter_image = cv2.imread(iter_image_path)
+    target_image = cv2.imread(target_image_path)    
+    image = np.array(iter_image/2, dtype=np.uint8) + np.array(target_image/2, dtype=np.uint8)
+    
+    cv2.putText(image, f'Iterations: {iter}', (10, 50), cv2.FONT_HERSHEY_TRIPLEX, 1.5, (0,0,0), 2)
+    for i, (iter_keypoint, target_keypoint) in enumerate(zip(iter_keypoints, target_keypoints)):
+        cv2.drawMarker(image, (int(iter_keypoint[0]), int(iter_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
+        cv2.circle(image, (int(target_keypoint[0]), int(target_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2)                
+    cv2.imwrite(iter_image_path, image.copy())
+    
 
 def create_joint_markers(joint_entiies, jointPositions):    
     for i_p, position in enumerate(jointPositions):
@@ -341,9 +356,11 @@ target_keypoints = label['objects'][0]['projected_keypoints'] # goal for 2d join
 target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [14]
 # print('target_keypoints: ', target_keypoints)
 jointAngles = np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float64)
-eps = 10e-6 # epsilon for Jacobian approximation
+# eps = 1e-6 # epsilon for Jacobian approximation
+eps = np.linspace(1e-5, 1e-5, 7)
 iterations = 100 # This value can be adjusted.
 for iter in range(iterations):    
+    
     # get joint 2d keypoint from 3d points and camera model
     keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
     # print('keypoints: ', keypoints)
@@ -351,9 +368,9 @@ for iter in range(iterations):
     Jacobian = np.zeros((numJoints*2, numJoints))
     for col in range(numJoints):
         eps_array = np.zeros(numJoints)
-        eps_array[col] = eps
+        eps_array[col] = eps[col]
         keypoints_eps = get_joint_keypoints_from_angles(jointAngles+eps_array, opt, camera_name = 'camera')
-        Jacobian[:,col] = (keypoints_eps - keypoints)/eps
+        Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 2, axis=0)
     dy = np.array(target_keypoints - keypoints)
     dx = np.linalg.pinv(Jacobian)@dy
     jointAngles += dx # all joint angle update
@@ -371,6 +388,7 @@ for iter in range(iterations):
         obj_entity.get_transform().set_position(link_world_state[link_num][0])        
         obj_entity.get_transform().set_rotation(link_world_state[link_num][1]) 
     
+    keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
     # print(f'iteration: {str(iter).zfill(5)}/{str(iterations).zfill(5)}')
 
 
@@ -385,10 +403,14 @@ for iter in range(iterations):
         samples_per_pixel=int(opt.spp),
         file_path=f"{opt.outf}/{str(iter).zfill(5)}.png"
     )
-
+    iter_image_path = f"{opt.outf}/{str(iter).zfill(5)}.png"
+    target_image_path = f"{opt.inputf}/{str(opt.idx).zfill(5)}.png"
+    save_keypoint_visualize_image(iter_image_path, target_image_path, keypoints.reshape(7,2), target_keypoints.reshape(7,2), iter)
     criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(jointAngles) )
-    print('criteria: ', criteria)
-    if criteria < 10e-3:
+    print('iter: {}, criteria: {}'.format(iter, criteria))
+    if criteria < 1e-1:
+        eps *= 0.9
+    if criteria < 1e-2:
         break
 
 # export_to_ndds_file(
@@ -404,5 +426,5 @@ for iter in range(iterations):
 
 p.disconnect()
 nvisii.deinitialize()
-
-subprocess.call(['ffmpeg', '-y', '-framerate', '30', '-i', r"%05d.png",  '-vcodec', 'libx264', '-pix_fmt', 'yuv420p', 'output.mp4'], cwd=os.path.realpath(opt.outf))
+framerate = str(iter/10)
+subprocess.call(['ffmpeg', '-y', '-framerate', '2', '-i', r"%05d.png",  '-vcodec', 'libx264', '-pix_fmt', 'yuv420p', 'output.mp4'], cwd=os.path.realpath(opt.outf))

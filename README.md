@@ -7,12 +7,13 @@ Those codes are referenced from basic tutorials of PyBullet and NVISII.
 The main network includes Resnet-50 as a backbone for feature extraction from input images, followed by transformer which is well known for handeling sequential data. The output joint 2D keypoint is trained with ground truth keypoint belief maps which has the same size with the input image.
 
 ### Network Architecture
-![Architecture](https://github.com/peytonhong/kirope/blob/main/docs/network_architecture.png)
+![Architecture](https://github.com/peytonhong/KIROPE/blob/main/docs/network_architecture_2.png)
 
 * Input data
   * RGB image (single or sequential)
   * Robot Kinematics states (joint pose and velocity)
 * Output
   * Robot joint 2D keypoints
-
+* J-PnP (PnP for Articulated Joint Alignment) : 2D keypoint -> Joint angles
+* Digital Twin: PyBullet based physics simulator
 ### At the moment, this repository is under consturction. More codes will be updated soon.

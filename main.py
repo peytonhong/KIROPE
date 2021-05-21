@@ -55,7 +55,7 @@ def train(args, model, dataset, device, optimizer):
     weights = np.array(weights)/np.sum(weights) # normalize
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-        keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 256]
+        keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 100, 100]
         gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
@@ -96,7 +96,7 @@ def test(args, model, dataset, device):
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-            keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 256]
+            keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 100, 100]
             gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
             # joint_angles = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
@@ -114,10 +114,11 @@ def test(args, model, dataset, device):
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
+            break
             
-            
+        print(image_path)    
         visualize_result(image_path, output['pred_belief_maps'].cpu().numpy(), gt_belief_maps.cpu().numpy())
-            
+        visualize_keypoint_embeddings(keypoint_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
 
@@ -155,7 +156,12 @@ def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
         cv2.circle(image, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2)        
     cv2.imwrite('visualize_result.png', image)
     
-
+def visualize_keypoint_embeddings(keypoint_embeddings):
+    for i in range(len(keypoint_embeddings)):
+        file_name = f'keypoint_embedding_{i}.png'
+        embedding = (keypoint_embeddings[i]*255).astype(np.uint8)
+        image = cv2.cvtColor(embedding, cv2.COLOR_GRAY2BGR)
+        cv2.imwrite(file_name, image.copy())
 
 
 
@@ -215,7 +221,7 @@ def main(args):
 
     else: # evaluate mode
         model = torch.load('./checkpoints/model_best.pth.tar')
-        test_loss = test(args, model, train_iterator, device)
+        test_loss = test(args, model, test_iterator, device)
         print(f'Test Loss: {test_loss:.10f}')
 
 

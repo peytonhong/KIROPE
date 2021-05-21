@@ -22,7 +22,7 @@ class RobotDataset(Dataset):
             T.ToTensor(),
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
-        self.image_resize = T.Resize(800)
+        self.image_resize_800 = T.Resize(800)
 
 
     def __len__(self):
@@ -33,7 +33,7 @@ class RobotDataset(Dataset):
         # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).astype(np.float32)
         image_path = self.image_paths[idx]
         image = Image.open(image_path).convert('RGB') # [w, h]
-        image = self.image_transform(image)
+        image = self.image_transform(image) # after T.ToTensor() [3, h, w]
         with open(self.label_paths[idx]) as json_file:
             label = json.load(json_file)
         joint_angles = label['objects'][0]['joint_angles']
@@ -43,9 +43,9 @@ class RobotDataset(Dataset):
         projected_keypoints = label['objects'][0]['projected_keypoints']        
         belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
         keypoint_embeddings = torch.tensor(gaussian_position_encoding(joint_states)).type(torch.FloatTensor) # [7, 10000]
-        
-        image = self.image_resize(image)
-        stacked_images = torch.cat((image, self.image_resize(keypoint_embeddings.reshape(7, 100, 100))), dim=0) # [10, 800, 800]        
+        keypoint_embeddings = keypoint_embeddings.reshape(7,100,100)
+        image = self.image_resize_800(image) # [3, 800, 800]
+        stacked_images = torch.cat((image, self.image_resize_800(keypoint_embeddings)), dim=0) # [10, 800, 800]        
 
         sample = {
             'image': image, 

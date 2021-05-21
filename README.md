@@ -11,7 +11,7 @@ The main network includes Resnet-50 as a backbone for feature extraction from in
 
 * Input data
   * RGB image (single or sequential)
-  * Robot Kinematics states (joint pose and velocity)
+  * Gaussian State Embeddings (joint pose and velocity from robot Kinematics)
 * Output
   * Robot joint 2D keypoints
 * J-PnP (PnP for Articulated Joint Alignment) : 2D keypoint -> Joint angles

@@ -55,7 +55,7 @@ def train(args, model, dataset, device, optimizer):
     weights = np.array(weights)/np.sum(weights) # normalize
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-        keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 100, 100]
+        state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
         gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
@@ -64,10 +64,10 @@ def train(args, model, dataset, device, optimizer):
         # image_path = sampled_batch['image_path']
         stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-        # image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
+        # image, state_embeddings, gt_belief_maps = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device)
         stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        # output = model(image, keypoint_embeddings) # Transformer style model
+        # output = model(image, state_embeddings) # Transformer style model
         output = model(stacked_images) # ResNet model
         loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         # loss_0 = (F.mse_loss(output['pred_belief_maps'][:,0], gt_belief_maps[:,0]))*weights[0] # weighted loss by joints
@@ -96,7 +96,7 @@ def test(args, model, dataset, device):
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-            keypoint_embeddings = sampled_batch['keypoint_embeddings'] # [N, 7, 100, 100]
+            state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
             gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
             # joint_angles = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
@@ -105,20 +105,18 @@ def test(args, model, dataset, device):
             image_path = sampled_batch['image_path']
             stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-            # image, keypoint_embeddings, gt_belief_maps = image.to(device), keypoint_embeddings.to(device), gt_belief_maps.to(device)
+            # image, state_embeddings, gt_belief_maps = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device)
             stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
-            # output = model(image, keypoint_embeddings)
+            # output = model(image, state_embeddings)
             output = model(stacked_images)
             
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
-            break
             
-        print(image_path)    
-        visualize_result(image_path, output['pred_belief_maps'].cpu().numpy(), gt_belief_maps.cpu().numpy())
-        visualize_keypoint_embeddings(keypoint_embeddings[0].cpu().numpy())
+        visualize_result(image_path[0], output['pred_belief_maps'][0].cpu().numpy(), gt_belief_maps[0].cpu().numpy())
+        visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
 
@@ -145,21 +143,21 @@ def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
     # visualize the joint position prediction wih ground truth for one sample
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
     bgr_colors = rgb_colors[:, ::-1]
-    image = cv2.imread(image_paths[0])
-    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps[0])     
-    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps[0])         
-    save_belief_map_images(pred_belief_maps[0], 'pred')
-    save_belief_map_images(gt_belief_maps[0], 'gt')
+    image = cv2.imread(image_paths)
+    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps)     
+    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
+    save_belief_map_images(pred_belief_maps, 'pred')
+    save_belief_map_images(gt_belief_maps, 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
         cv2.circle(image, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2)        
     cv2.imwrite('visualize_result.png', image)
     
-def visualize_keypoint_embeddings(keypoint_embeddings):
-    for i in range(len(keypoint_embeddings)):
+def visualize_state_embeddings(state_embeddings):
+    for i in range(len(state_embeddings)):
         file_name = f'keypoint_embedding_{i}.png'
-        embedding = (keypoint_embeddings[i]*255).astype(np.uint8)
+        embedding = (state_embeddings[i]*255).astype(np.uint8)
         image = cv2.cvtColor(embedding, cv2.COLOR_GRAY2BGR)
         cv2.imwrite(file_name, image.copy())
 

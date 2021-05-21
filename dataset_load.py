@@ -8,7 +8,7 @@ from torch.utils.data import Dataset
 
 from PIL import Image
 import torchvision.transforms as T
-from utils.gaussian_position_encoding import gaussian_position_encoding
+from utils.gaussian_position_encoding import gaussian_state_embedding
 
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
@@ -42,10 +42,10 @@ class RobotDataset(Dataset):
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
         belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
-        keypoint_embeddings = torch.tensor(gaussian_position_encoding(joint_states)).type(torch.FloatTensor) # [7, 10000]
-        keypoint_embeddings = keypoint_embeddings.reshape(7,100,100)
+        state_embeddings = torch.tensor(gaussian_state_embedding(joint_states)).type(torch.FloatTensor) # [7, 10000]
+        state_embeddings = state_embeddings.reshape(7,100,100)
         image = self.image_resize_800(image) # [3, 800, 800]
-        stacked_images = torch.cat((image, self.image_resize_800(keypoint_embeddings)), dim=0) # [10, 800, 800]        
+        stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
 
         sample = {
             'image': image, 
@@ -54,7 +54,7 @@ class RobotDataset(Dataset):
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
             'projected_keypoints': projected_keypoints,
-            'keypoint_embeddings': keypoint_embeddings,
+            'state_embeddings': state_embeddings,
             'image_path': image_path,
             'stacked_images': stacked_images,
             }

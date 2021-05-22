@@ -18,7 +18,10 @@ opt.height = 500
 opt.noise = False
 opt.frame_freq = 8
 opt.nb_frames = 10000
-opt.outf = 'annotation/train'
+opt.type = 'train'
+opt.outf = f'annotation/{opt.type}'
+opt.random_objects = True
+opt.nb_objs = 100
 
 make_joint_sphere = False
 
@@ -185,37 +188,6 @@ def export_to_ndds_file(
     with open(filename, 'w+') as fp:
         json.dump(dict_out, fp, indent=4, sort_keys=True)
 
-# show an interactive window, and use "lazy" updates for faster object creation time 
-nvisii.initialize(headless=False, lazy_updates=True)
-
-if not opt.noise is True: 
-    nvisii.enable_denoiser()
-
-# Create a camera
-camera = nvisii.entity.create(
-    name = "camera",
-    transform = nvisii.transform.create("camera"),
-    camera = nvisii.camera.create_from_fov(
-        name = "camera", 
-        field_of_view = 0.85,
-        aspect = float(opt.width)/float(opt.height)
-    )
-)
-
-# lets store the camera look at information so we can export it
-camera_struct_look_at = {
-    'at':[0,0,1],
-    'up':[0,0,1],
-    'eye':[3,0,1]
-}
-
-# # # # # # # # # # # # # # # # # # # # # # # # #
-camera.get_transform().look_at(
-    at = camera_struct_look_at['at'],
-    up = camera_struct_look_at['up'],
-    eye = camera_struct_look_at['eye']
-)
-nvisii.set_camera_entity(camera)
 
 def get_my_keypoints(camera_entity, robotId, joint_world_position, opt):
     # get 2d keypoints from 3d positions using camera K, R matrix (2021.05.03, Hyosung Hong)
@@ -247,6 +219,132 @@ def get_my_keypoints(camera_entity, robotId, joint_world_position, opt):
 
     return jointKeypoints
 
+def uniform(a, b):
+        "Get a random number in the range [a, b) or [a, b] depending on rounding."
+        return a + (b-a) * np.random.rand()
+
+def set_random_objects(obj):
+    obj.get_transform().set_position((
+        uniform(-5,5),
+        uniform(-5,5),
+        uniform(-1,3)
+    ))
+
+    obj.get_transform().set_rotation((
+        uniform(0,1), # X 
+        uniform(0,1), # Y
+        uniform(0,1), # Z
+        uniform(0,1)  # W
+    ))
+
+    s = uniform(0.05,0.15)
+    obj.get_transform().set_scale((
+        s,s,s
+    ))  
+
+    rgb = colorsys.hsv_to_rgb(
+        uniform(0,1),
+        uniform(0.7,1),
+        uniform(0.7,1)
+    )
+
+    obj.get_material().set_base_color(rgb)
+
+    mat = obj.get_material()
+    
+    # Some logic to generate "natural" random materials
+    material_type = np.random.choice(range(3))
+    
+    # Glossy / Matte Plastic
+    if material_type == 0:  
+        if np.random.choice(range(3)): mat.set_roughness(uniform(.9, 1))
+        else           : mat.set_roughness(uniform(.0,.1))
+    
+    # Metallic
+    if material_type == 1:  
+        mat.set_metallic(uniform(0.9,1))
+        if np.random.choice(range(3)): mat.set_roughness(uniform(.9, 1))
+        else           : mat.set_roughness(uniform(.0,.1))
+    
+    # Glass
+    if material_type == 2:  
+        mat.set_transmission(uniform(0.9,1))
+        
+        # controls outside roughness
+        if np.random.choice(range(3)): mat.set_roughness(uniform(.9, 1))
+        else           : mat.set_roughness(uniform(.0,.1))
+        
+        # controls inside roughness
+        if np.random.choice(range(3)): mat.set_transmission_roughness(uniform(.9, 1))
+        else           : mat.set_transmission_roughness(uniform(.0,.1))
+
+    mat.set_sheen(uniform(0,1)) # <- soft velvet like reflection near edges
+    mat.set_clearcoat(uniform(0,1)) # <- Extra, white, shiny layer. Good for car paint.    
+    if np.random.choice(range(2)): mat.set_anisotropic(uniform(0.9,1)) # elongates highlights 
+
+# show an interactive window, and use "lazy" updates for faster object creation time 
+nvisii.initialize(headless=False, lazy_updates=True)
+
+if not opt.noise is True: 
+    nvisii.enable_denoiser()
+# Create a camera
+camera = nvisii.entity.create(
+    name = "camera",
+    transform = nvisii.transform.create("camera"),
+    camera = nvisii.camera.create_from_fov(
+        name = "camera", 
+        field_of_view = 0.85,
+        aspect = float(opt.width)/float(opt.height)
+    )
+)
+
+# lets store the camera look at information so we can export it
+camera_struct_look_at = {
+    'at':[0,0,1],
+    'up':[0,0,1],
+    'eye':[3,0,1]
+}
+
+# # # # # # # # # # # # # # # # # # # # # # # # #
+camera.get_transform().look_at(
+    at = camera_struct_look_at['at'],
+    up = camera_struct_look_at['up'],
+    eye = camera_struct_look_at['eye']
+)
+nvisii.set_camera_entity(camera)
+
+
+# Lets create a random scene. 
+if opt.random_objects:
+    # First lets pre-load some mesh components.
+    nvisii.mesh.create_sphere('m_0')
+    nvisii.mesh.create_torus_knot('m_1')
+    nvisii.mesh.create_teapotahedron('m_2')
+    nvisii.mesh.create_box('m_3')
+    nvisii.mesh.create_capped_cone('m_4')
+    nvisii.mesh.create_capped_cylinder('m_5')
+    nvisii.mesh.create_capsule('m_6')
+    nvisii.mesh.create_cylinder('m_7')
+    nvisii.mesh.create_disk('m_8')
+    nvisii.mesh.create_dodecahedron('m_9')
+    nvisii.mesh.create_icosahedron('m_10')
+    nvisii.mesh.create_icosphere('m_11')
+    nvisii.mesh.create_rounded_box('m_12')
+    nvisii.mesh.create_spring('m_13')
+    nvisii.mesh.create_torus('m_14')
+    nvisii.mesh.create_tube('m_15')
+    random_obj_entities = []
+    for i in range(opt.nb_objs):
+        name = f'random_obj_{i}'
+        obj = nvisii.entity.create(
+        name = name,
+        transform = nvisii.transform.create(name),
+        material = nvisii.material.create(name)
+        )        
+        mesh_id = np.random.choice(range(16))
+        mesh = nvisii.mesh.get(f'm_{mesh_id}')
+        obj.set_mesh(mesh)
+        random_obj_entities.append(obj)
 
 # Setup bullet physics stuff
 seconds_per_step = 1.0 / 240.0
@@ -402,7 +500,7 @@ for i in tqdm(range(int(opt.nb_frames))):
 
         # robot joint pose setting
         t += dt
-        if i%100 == 0: # refresh frequencies at every 100 frames
+        if opt.type == 'train' and i%100 == 0: # refresh frequencies at every 100 frames
             freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
         targetJointPoses = [clamping(lower_limit[k], signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
 
@@ -438,7 +536,7 @@ for i in tqdm(range(int(opt.nb_frames))):
         obj_entity.get_transform().set_position(pos_world)        
         # obj_entity.get_transform().set_rotation(rot_shift(rot_world)) # nvisii quat expects w as the first argument
         obj_entity.get_transform().set_rotation(rot_world) 
-    print(f'rendering frame {str(i).zfill(5)}/{str(opt.nb_frames).zfill(5)}')
+    # print(f'rendering frame {str(i).zfill(5)}/{str(opt.nb_frames).zfill(5)}')
 
     # get joint states
     joint_states = []
@@ -449,6 +547,10 @@ for i in tqdm(range(int(opt.nb_frames))):
     # get_my_keypoints(camera_entity=camera, robotId=kukaId, joint_world_position=joint_world_position, opt=opt)
     if make_joint_sphere:
         create_joint_markers(joint_entities, joint_world_position)
+
+    if opt.random_objects:
+        for obj_entity in random_obj_entities:
+            set_random_objects(obj_entity)
 
     nvisii.render_to_file(
         width=int(opt.width), 

@@ -12,7 +12,7 @@ The main network includes Resnet-50 as a backbone for feature extraction from in
 * A digital twin based architecture to deliver kinematics information into the proposed neural network. We can expect this arthitecture is robust finding joint keypoints even when the robot is occuluded by other objects.
 
 ### Network Architecture
-![Architecture](https://github.com/peytonhong/KIROPE/blob/main/docs/network_architecture_new.png)
+![Architecture](https://github.com/peytonhong/KIROPE/blob/main/docs/network_architecture_2.png)
 
 * Input data
   * RGB image (single)

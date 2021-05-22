@@ -225,7 +225,7 @@ def uniform(a, b):
 
 def set_random_objects(obj):
     obj.get_transform().set_position((
-        uniform(-5,5),
+        uniform(-1,3),
         uniform(-5,5),
         uniform(-1,3)
     ))
@@ -237,7 +237,7 @@ def set_random_objects(obj):
         uniform(0,1)  # W
     ))
 
-    s = uniform(0.05,0.15)
+    s = uniform(0.05,0.10)
     obj.get_transform().set_scale((
         s,s,s
     ))  

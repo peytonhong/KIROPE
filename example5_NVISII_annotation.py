@@ -17,8 +17,8 @@ opt.width = 500
 opt.height = 500 
 opt.noise = False
 opt.frame_freq = 8
-opt.nb_frames = 10000
-opt.type = 'train'
+opt.nb_frames = 1000
+opt.type = 'test'
 opt.outf = f'annotation/{opt.type}'
 opt.random_objects = True
 opt.nb_objs = 100
@@ -173,8 +173,8 @@ def export_to_ndds_file(
     projected_keypoints, _ = get_joint_keypoints(jointPositions, opt.width, opt.height, camera_name=camera_name)
 
     # put them in the image space. 
-    for i_p, p in enumerate(projected_keypoints):
-        projected_keypoints[i_p] = [p[0]*width, p[1]*height]
+    # for i_p, p in enumerate(projected_keypoints):
+    #     projected_keypoints[i_p] = [p[0]*width, p[1]*height]
     # print('projected_keypoints: ', projected_keypoints)
    
     # Final export

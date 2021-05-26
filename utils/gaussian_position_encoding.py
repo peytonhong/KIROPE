@@ -23,10 +23,10 @@ def gaussian_state_embedding(joint_states, num_features=10000, s=0.1):
         angle, velocity = joint_states[i]
         mean_x, mean_y = np.cos(angle), np.sin(angle)  # polar coordinate concept
         sigma_x = sigma_y = s
-        if velocity > 0:
-            sigma_x += np.arctan(velocity)/2  # sigma_x > sigma_y
-        else:
-            sigma_y += -np.arctan(velocity)/2  # sigma_x < sigma_y
+        # if velocity > 0:
+        #     sigma_x += np.arctan(velocity)/2  # sigma_x > sigma_y
+        # else:
+        #     sigma_y += -np.arctan(velocity)/2  # sigma_x < sigma_y
         z = np.exp( -( (xx-mean_x)**2/(2*sigma_x**2)+(yy-mean_y)**2/(2*sigma_y**2) ) )  # Gaussian distribution in 2D        
         state_embeddings[i][:] = z.flatten()
     return state_embeddings # [7, 10000]

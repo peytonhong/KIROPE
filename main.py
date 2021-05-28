@@ -117,6 +117,7 @@ def test(args, model, dataset, device):
             num_tested_data += len(sampled_batch)
             
             visualize_result(image_path[0], output['pred_belief_maps'][0].cpu().numpy(), gt_belief_maps[0].cpu().numpy())
+
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data

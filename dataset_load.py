@@ -42,8 +42,10 @@ class RobotDataset(Dataset):
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
         belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
-        state_embeddings = torch.tensor(gaussian_state_embedding(joint_states)).type(torch.FloatTensor) # [7, 10000]
-        state_embeddings = state_embeddings.reshape(7,100,100)
+        state_embeddings = torch.tensor(gaussian_state_embedding(joint_states)).type(torch.FloatTensor) # [7, num_features]
+        _, num_features = state_embeddings.shape
+        w_feature = np.sqrt(num_features).astype(np.uint8)
+        state_embeddings = state_embeddings.reshape(7, w_feature, w_feature)
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
 
@@ -54,7 +56,7 @@ class RobotDataset(Dataset):
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
             'projected_keypoints': projected_keypoints,
-            'state_embeddings': state_embeddings,
+            'state_embeddings': state_embeddings.flatten(1),
             'image_path': image_path,
             'stacked_images': stacked_images,
             }

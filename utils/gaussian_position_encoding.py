@@ -1,6 +1,6 @@
 import numpy as np
 
-def gaussian_state_embedding(joint_states, num_features=10000, s=0.1):
+def gaussian_state_embedding(joint_states, num_features=256, s=0.1):
     """
     The angle of each robot joint are represented into a polar coordinate point as 
     (x=cos(angle), y=sin(angle)). Then, the 2D plane is converted into a 2D gaussian 
@@ -29,4 +29,4 @@ def gaussian_state_embedding(joint_states, num_features=10000, s=0.1):
         #     sigma_y += -np.arctan(velocity)/2  # sigma_x < sigma_y
         z = np.exp( -( (xx-mean_x)**2/(2*sigma_x**2)+(yy-mean_y)**2/(2*sigma_y**2) ) )  # Gaussian distribution in 2D        
         state_embeddings[i][:] = z.flatten()
-    return state_embeddings # [7, 10000]
+    return state_embeddings # [7, num_features]

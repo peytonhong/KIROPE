@@ -175,7 +175,7 @@ class KIROPE_Transformer(nn.Module):
         # print(x.shape)
         x = x.transpose(0, 1) # [1, 7, 256]
         
-        x = self.fc_out(x) # [1, 7, 25*25]
+        x = self.fc_out(x) # [1, 7, 20, 20]
         x = x.reshape(-1, self.num_joints, 25, 25)
         # x = F.relu(self.dconv1(x))
         # x = F.relu(self.dconv2(x))

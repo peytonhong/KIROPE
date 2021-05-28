@@ -116,7 +116,7 @@ def test(args, model, dataset, device):
             num_tested_data += len(sampled_batch)
             
         visualize_result(image_path[0], output['pred_belief_maps'][0].cpu().numpy(), gt_belief_maps[0].cpu().numpy())
-        visualize_state_embeddings(state_embeddings[0].cpu().numpy())
+        # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
 
@@ -152,7 +152,7 @@ def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
         cv2.circle(image, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2)        
-    cv2.imwrite('visualize_result.png', image)
+    cv2.imwrite(f'visualization_result/{image_paths[-9:]}', image)
     
 def visualize_state_embeddings(state_embeddings):
     for i in range(len(state_embeddings)):

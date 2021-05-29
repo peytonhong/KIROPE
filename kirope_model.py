@@ -169,8 +169,8 @@ class KIROPE_Transformer(nn.Module):
         # h = self.transformer(h.flatten(2).permute(2, 0, 1), state_embeddings.transpose(0,1)) # [input, embedding]
         
         h = h.flatten(2).permute(2, 0, 1)        
-        h = self.transformer_encoder(h)  # [625, 1, 256]
-        x = self.transformer_decoder(state_embeddings.transpose(0,1)+positional_encoding.unsqueeze(1), h) # [7, 1, 256]
+        h = self.transformer_encoder(h)  # [625, N, 256]
+        x = self.transformer_decoder(state_embeddings.transpose(0,1)+positional_encoding.transpose(0,1), h) # [7, N, 256]
         # print(x.shape)
         x = x.transpose(0, 1) # [1, 7, 256]
         

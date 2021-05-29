@@ -8,8 +8,7 @@ from torch.utils.data import Dataset
 
 from PIL import Image
 import torchvision.transforms as T
-from utils.gaussian_position_encoding import gaussian_state_embedding
-
+from utils.gaussian_position_encoding import gaussian_state_embedding, positional_encoding
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
 
@@ -49,7 +48,7 @@ class RobotDataset(Dataset):
         state_embeddings = state_embeddings.reshape(7, w_feature, w_feature)
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
-        
+        pe = positional_encoding(256, 7) # [7, 256]
         sample = {
             'image': image, 
             'joint_angles': joint_angles, 
@@ -60,6 +59,7 @@ class RobotDataset(Dataset):
             'state_embeddings': state_embeddings.flatten(1),
             'image_path': image_path,
             'stacked_images': stacked_images,
+            'positional_encoding': pe,
             }
         return sample
 

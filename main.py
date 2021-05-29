@@ -19,7 +19,6 @@ import cv2
 from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Transformer, ResnetSimple
-from utils.gaussian_position_encoding import positional_encoding
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -55,12 +54,12 @@ def train(args, model, dataset, device, optimizer):
     # weights = [1.0, 10.0, 40.0, 60.0, 80.0, 90.0, 100.0]
     weights = [1.0, 2.0, 5.0, 7.0, 8.0, 9.0, 10.0]
     weights = np.array(weights)/np.sum(weights) # normalize
-    pe = positional_encoding(256, 7) # [7, 256]
 
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
         state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
         gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
+        pe = sampled_batch['positional_encoding'] # [N, 7, 256]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
         # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        
@@ -97,12 +96,13 @@ def test(args, model, dataset, device):
 
     test_loss_sum = 0
     num_tested_data = 0
-    pe = positional_encoding(256, 7) # [7, 256]
+    
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image = sampled_batch['image'] # tensor [N, 3, 800, 800]
             state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
             gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
+            pe = sampled_batch['positional_encoding'] # [N, 7, 256]
             # joint_angles = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
             # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        

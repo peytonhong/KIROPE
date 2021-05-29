@@ -19,6 +19,7 @@ import cv2
 from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Transformer, ResnetSimple
+from utils.gaussian_position_encoding import positional_encoding
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -54,6 +55,8 @@ def train(args, model, dataset, device, optimizer):
     # weights = [1.0, 10.0, 40.0, 60.0, 80.0, 90.0, 100.0]
     weights = [1.0, 2.0, 5.0, 7.0, 8.0, 9.0, 10.0]
     weights = np.array(weights)/np.sum(weights) # normalize
+    pe = positional_encoding(256, 7) # [7, 256]
+
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
         state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
@@ -65,10 +68,10 @@ def train(args, model, dataset, device, optimizer):
         # image_path = sampled_batch['image_path']
         # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-        image, state_embeddings, gt_belief_maps = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device)
+        image, state_embeddings, gt_belief_maps, pe = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device), pe.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        output = model(image, state_embeddings) # Transformer style model
+        output = model(image, state_embeddings, pe) # Transformer style model
         # output = model(stacked_images) # ResNet model
         # loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         loss_0 = (F.mse_loss(output['pred_belief_maps'][:,0], gt_belief_maps[:,0]))*weights[0] # weighted loss by joints
@@ -94,6 +97,7 @@ def test(args, model, dataset, device):
 
     test_loss_sum = 0
     num_tested_data = 0
+    pe = positional_encoding(256, 7) # [7, 256]
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image = sampled_batch['image'] # tensor [N, 3, 800, 800]
@@ -106,9 +110,9 @@ def test(args, model, dataset, device):
             image_path = sampled_batch['image_path']
             # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-            image, state_embeddings, gt_belief_maps = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device)
+            image, state_embeddings, gt_belief_maps, pe = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device), pe.to(device)
             # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
-            output = model(image, state_embeddings)
+            output = model(image, state_embeddings, pe)
             # output = model(stacked_images)
             
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
@@ -174,7 +178,7 @@ def main(args):
     * a Transformer - we use the default PyTorch nn.TransformerEncoder, nn.TransformerDecoder
     """
     
-    hidden_dim = 256 # fixed for keypoint embiddings
+    hidden_dim = 256 # fixed for state embiddings
     lr = 1.5e-4           # learning rate
 
     model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
@@ -193,8 +197,8 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/train_many_obj')
-    test_dataset = RobotDataset(data_dir='annotation/test_many_obj')
+    train_dataset = RobotDataset(data_dir='annotation/train_many_obj', embed_dim=hidden_dim)
+    test_dataset = RobotDataset(data_dir='annotation/test_many_obj', embed_dim=hidden_dim)
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=True)
 

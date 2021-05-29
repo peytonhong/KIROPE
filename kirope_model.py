@@ -2,7 +2,6 @@ from torchvision.models import resnet50, resnet101
 from torch import nn
 import torch.nn.functional as F
 
-
 class ResnetSimple(nn.Module):
     def __init__(self, n_keypoints=7, pretrained=True):
         super(ResnetSimple, self).__init__()
@@ -147,7 +146,7 @@ class KIROPE_Transformer(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, images, keypoint_embeddings):
+    def forward(self, images, state_embeddings, positional_encoding):
         # propagate inputs through ResNet-50 up to avg-pool layer
         x = self.backbone.conv1(images)
         x = self.backbone.bn1(x)
@@ -167,11 +166,11 @@ class KIROPE_Transformer(nn.Module):
         #                      self.query_pos.unsqueeze(1)).transpose(0, 1)   # [100, 1, 256]
         # h.shape == [1, 100, 256]
         # Transformer 
-        # h = self.transformer(h.flatten(2).permute(2, 0, 1), keypoint_embeddings.transpose(0,1)) # [input, embedding]
+        # h = self.transformer(h.flatten(2).permute(2, 0, 1), state_embeddings.transpose(0,1)) # [input, embedding]
         
         h = h.flatten(2).permute(2, 0, 1)        
         h = self.transformer_encoder(h)  # [625, 1, 256]
-        x = self.transformer_decoder(keypoint_embeddings.transpose(0,1), h) # [7, 1, 256]
+        x = self.transformer_decoder(state_embeddings.transpose(0,1)+positional_encoding.unsqueeze(1), h) # [7, 1, 256]
         # print(x.shape)
         x = x.transpose(0, 1) # [1, 7, 256]
         

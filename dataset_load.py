@@ -13,7 +13,7 @@ from utils.gaussian_position_encoding import gaussian_state_embedding
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
 
-    def __init__(self, data_dir='annotation/train'):        
+    def __init__(self, data_dir='annotation/train', embed_dim=256):        
         self.image_paths = sorted(glob(os.path.join(data_dir, '*.png')))
         self.label_paths = sorted(glob(os.path.join(data_dir, '*.json')))
         # standard PyTorch mean-std input image normalization
@@ -23,6 +23,7 @@ class RobotDataset(Dataset):
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         self.image_resize_800 = T.Resize(800)
+        self.embed_dim = embed_dim
 
 
     def __len__(self):
@@ -42,13 +43,13 @@ class RobotDataset(Dataset):
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints = label['objects'][0]['projected_keypoints']        
         belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
-        state_embeddings = torch.tensor(gaussian_state_embedding(joint_states)).type(torch.FloatTensor) # [7, num_features]
+        state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [7, num_features]
         _, num_features = state_embeddings.shape
         w_feature = np.sqrt(num_features).astype(np.uint8)
         state_embeddings = state_embeddings.reshape(7, w_feature, w_feature)
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
-
+        
         sample = {
             'image': image, 
             'joint_angles': joint_angles, 

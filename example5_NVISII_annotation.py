@@ -17,11 +17,11 @@ opt.width = 500
 opt.height = 500 
 opt.noise = False
 opt.frame_freq = 8
-opt.nb_frames = 1000
-opt.type = 'test'
+opt.nb_frames = 10000
+opt.type = 'train'
 opt.outf = f'annotation/{opt.type}'
 opt.random_objects = True
-opt.nb_objs = 100
+opt.nb_objs = 30
 
 make_joint_sphere = False
 
@@ -225,9 +225,9 @@ def uniform(a, b):
 
 def set_random_objects(obj):
     obj.get_transform().set_position((
-        uniform(1,3),
-        uniform(-3,3),
-        uniform(0,3)
+        uniform(1,2),
+        uniform(-1,1),
+        uniform(0,2)
     ))
 
     obj.get_transform().set_rotation((
@@ -503,7 +503,7 @@ for i in tqdm(range(int(opt.nb_frames))):
         if opt.type == 'train' and i%100 == 0: # refresh frequencies at every 100 frames
             signs = [np.random.choice([-1, 1]) for _ in range(numJoints)]
             freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
-        targetJointPoses = [clamping(lower_limit[k], 3.14*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
+        targetJointPoses = [clamping(lower_limit[k], 1.57*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
 
         for l in range(numJoints):
             p.setJointMotorControl2(bodyIndex=kukaId,

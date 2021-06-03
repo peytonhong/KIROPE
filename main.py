@@ -196,8 +196,8 @@ def main(args):
 
     train_dataset = RobotDataset(data_dir='annotation/train_many_obj', embed_dim=hidden_dim)
     test_dataset = RobotDataset(data_dir='annotation/test_many_obj', embed_dim=hidden_dim)
-    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
-    test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=True)
+    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
+    test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
     if args.command == 'train':
         # CHECKPOINT_DIR

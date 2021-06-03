@@ -44,7 +44,9 @@ class RobotDataset(Dataset):
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints_wh = label['objects'][0]['projected_keypoints'] #[7, 2(w,h)]
         belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=0)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps = self.image_resize_16(belief_maps)
         belief_maps_noise = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=5)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps_noise = self.image_resize_16(belief_maps_noise)
         state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [7, num_features]
         _, num_features = state_embeddings.shape
         w_feature = np.sqrt(num_features).astype(np.uint8)
@@ -52,7 +54,7 @@ class RobotDataset(Dataset):
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
         pe = positional_encoding(256, 7) # [7, 256]
-        belief_maps = self.image_resize_16(belief_maps)
+        
         projected_keypoints_hw_norm = torch.tensor(np.array(projected_keypoints_wh)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [7, 2(h,w)]
         sample = {
             'image': image, 
@@ -97,8 +99,8 @@ class RobotDataset(Dataset):
         w = int(sigma * 2)
 
         for i_point, point in enumerate(pointsBelief):
-            pixel_u = int(point[0]) + np.random.randn()*noise_std # width axis
-            pixel_v = int(point[1]) + np.random.randn()*noise_std # height axis
+            pixel_u = int(point[0] + np.random.randn()*noise_std) # width axis
+            pixel_v = int(point[1] + np.random.randn()*noise_std) # height axis
             array = np.zeros((image_height, image_width))
 
             # TODO makes this dynamics so that 0,0 would generate a belief map.

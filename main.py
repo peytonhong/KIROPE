@@ -18,7 +18,7 @@ import cv2
 # import matplotlib.pyplot as plt
 from tqdm import tqdm
 from dataset_load import RobotDataset
-from kirope_model import KIROPE_Transformer, ResnetSimple
+from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -52,8 +52,8 @@ def train(args, model, dataset, device, optimizer):
     train_loss_sum = 0
     num_trained_data = 0
     # weights = [1.0, 10.0, 40.0, 60.0, 80.0, 90.0, 100.0]
-    weights = [1.0, 2.0, 5.0, 7.0, 8.0, 9.0, 10.0]
-    weights = np.array(weights)/np.sum(weights) # normalize
+    # weights = [1.0, 2.0, 5.0, 7.0, 8.0, 9.0, 10.0]
+    # weights = np.array(weights)/np.sum(weights) # normalize
 
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
@@ -62,25 +62,17 @@ def train(args, model, dataset, device, optimizer):
         pe = sampled_batch['positional_encoding'] # [N, 7, 256]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
-        # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        
-        # projected_keypoints = sampled_batch['projected_keypoints']        
+        # joint_states = sampled_batch['joint_states'] # [N, 7, 2]
+        projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
         # image_path = sampled_batch['image_path']
         # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
-
-        image, state_embeddings, gt_belief_maps, pe = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device), pe.to(device)
+        image, state_embeddings = image.to(device), state_embeddings.to(device)
+        pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        output = model(image, state_embeddings, pe) # Transformer style model
+        output = model(image, gt_belief_maps, pe) # Transformer style model
         # output = model(stacked_images) # ResNet model
-        # loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
-        loss_0 = (F.mse_loss(output['pred_belief_maps'][:,0], gt_belief_maps[:,0]))*weights[0] # weighted loss by joints
-        loss_1 = (F.mse_loss(output['pred_belief_maps'][:,1], gt_belief_maps[:,1]))*weights[1] # weighted loss by joints
-        loss_2 = (F.mse_loss(output['pred_belief_maps'][:,2], gt_belief_maps[:,2]))*weights[2] # weighted loss by joints
-        loss_3 = (F.mse_loss(output['pred_belief_maps'][:,3], gt_belief_maps[:,3]))*weights[3] # weighted loss by joints
-        loss_4 = (F.mse_loss(output['pred_belief_maps'][:,4], gt_belief_maps[:,4]))*weights[4] # weighted loss by joints
-        loss_5 = (F.mse_loss(output['pred_belief_maps'][:,5], gt_belief_maps[:,5]))*weights[5] # weighted loss by joints
-        loss_6 = (F.mse_loss(output['pred_belief_maps'][:,6], gt_belief_maps[:,6]))*weights[6] # weighted loss by joints
-        loss = loss_0 + loss_1 + loss_2 + loss_3 + loss_4 + loss_5 + loss_6
+        loss = F.mse_loss(output['pred_kps'], projected_keypoints)
         loss.backward()
         train_loss_sum += loss.item()*len(sampled_batch)
         num_trained_data += len(sampled_batch)
@@ -106,21 +98,22 @@ def test(args, model, dataset, device):
             # joint_angles = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
             # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        
-            # projected_keypoints = sampled_batch['projected_keypoints']        
+            projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
             image_path = sampled_batch['image_path']
             # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-            image, state_embeddings, gt_belief_maps, pe = image.to(device), state_embeddings.to(device), gt_belief_maps.to(device), pe.to(device)
+            image, state_embeddings = image.to(device), state_embeddings.to(device)
+            pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
             # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
             output = model(image, state_embeddings, pe)
             # output = model(stacked_images)
             
-            loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
+            loss = F.mse_loss(output['pred_kps'], projected_keypoints)
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
             
-            visualize_result(image_path[0], output['pred_belief_maps'][0].cpu().numpy(), gt_belief_maps[0].cpu().numpy())
+            visualize_result(image_path[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints[0].cpu().numpy())
 
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
@@ -145,15 +138,18 @@ def save_belief_map_images(belief_maps, map_type):
         image = cv2.cvtColor(belief_maps[i].copy(), cv2.COLOR_GRAY2RGB)
         cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)
 
-def visualize_result(image_paths, pred_belief_maps, gt_belief_maps):
+def visualize_result(image_paths, pred_kps, gt_kps):
     # visualize the joint position prediction wih ground truth for one sample
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
     bgr_colors = rgb_colors[:, ::-1]
     image = cv2.imread(image_paths)
-    pred_keypoints = extract_keypoints_from_belief_maps(pred_belief_maps)     
-    gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
-    save_belief_map_images(pred_belief_maps, 'pred')
-    save_belief_map_images(gt_belief_maps, 'gt')
+    height, width, channel = image.shape
+    pred_keypoints = [[int(u*width), int(v*height)] for v, u in pred_kps]
+    gt_keypoints = [[int(u*width), int(v*height)] for v, u in gt_kps]
+    # pred_keypoints = extract_keypoints_from_belief_maps(pred_kps)     
+    # gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
+    # save_belief_map_images(pred_kps, 'pred')
+    # save_belief_map_images(gt_belief_maps, 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
@@ -179,9 +175,10 @@ def main(args):
     """
     
     hidden_dim = 256 # fixed for state embiddings
-    lr = 1.5e-4           # learning rate
+    lr = 1e-4           # learning rate
 
-    model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
+    model = KIROPE_Attention(num_joints=7, hidden_dim=hidden_dim)
+    # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
     # model = ResnetSimple()
 
     if torch.cuda.is_available(): # for multi gpu compatibility

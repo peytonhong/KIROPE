@@ -33,13 +33,13 @@ def gaussian_state_embedding(joint_states, embed_dim=256, s=0.1):
         #     sigma_y += -np.arctan(velocity)/2  # sigma_x < sigma_y
         z = np.exp( -( (xx-mean_x)**2/(2*sigma_x**2)+(yy-mean_y)**2/(2*sigma_y**2) ) )  # Gaussian distribution in 2D        
         state_embeddings[i][:] = z.flatten()
-    return state_embeddings # [7, embed_dim]
+    return state_embeddings # [num_joints, embed_dim]
 
 
-def positional_encoding(dim, maxlen=1000):
-  pe = torch.zeros(maxlen, dim)
-  pos = torch.arange(0, maxlen, 1.).unsqueeze(1)
+def positional_encoding(dim, maxSeq=1000):
+  pe = torch.zeros(maxSeq, dim)
+  pos = torch.arange(0, maxSeq, 1.).unsqueeze(1)
   k = torch.exp(-np.log(10000)*torch.arange(0, dim, 2.)/dim)
   pe[:, 0::2] = torch.sin(pos*k)
   pe[:, 1::2] = torch.cos(pos*k)
-  return pe #[maxlen, dim]
+  return pe #[maxSeq, dim]

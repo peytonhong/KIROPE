@@ -146,7 +146,7 @@ class KIROPE_Transformer(nn.Module):
             nn.Sigmoid(),
         )
 
-    def forward(self, images, state_embeddings, positional_encoding):
+    def forward(self, images, belief_maps, positional_encoding):
         # propagate inputs through ResNet-50 up to avg-pool layer
         x = self.backbone.conv1(images)
         x = self.backbone.bn1(x)
@@ -168,9 +168,9 @@ class KIROPE_Transformer(nn.Module):
         # Transformer 
         # h = self.transformer(h.flatten(2).permute(2, 0, 1), state_embeddings.transpose(0,1)) # [input, embedding]
         
-        h = h.flatten(2).permute(2, 0, 1)        
-        h = self.transformer_encoder(h)  # [625, N, 256]
-        x = self.transformer_decoder(state_embeddings.transpose(0,1)+positional_encoding.transpose(0,1), h) # [7, N, 256]
+        h = h.flatten(2).permute(2, 0, 1) # [Sequence, N, Embedding]
+        h = self.transformer_encoder(h + positional_encoding.transpose(0,1))  # after encoder: [625, N, 256]
+        x = self.transformer_decoder(belief_maps.transpose(0,1), h) # [7, N, 256]
         # print(x.shape)
         x = x.transpose(0, 1) # [1, 7, 256]
         
@@ -182,3 +182,57 @@ class KIROPE_Transformer(nn.Module):
         x = self.upsample(x)
         # finally project transformer outputs to class labels and bounding boxes
         return {'pred_belief_maps': x}
+
+
+class KIROPE_Attention(nn.Module):
+    """
+    KIROPE implementation.
+
+    """
+    def __init__(self, num_joints, hidden_dim=256, nheads=8):
+        super().__init__()
+
+        self.num_joints = num_joints
+
+        # create ResNet-50 backbone
+        self.backbone = resnet50(pretrained=True)
+        del self.backbone.fc
+
+        # create conversion layer
+        self.conv = nn.Conv2d(2048, hidden_dim, 1) # [N, hidden_dim, 25, 25]
+
+        self.attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=nheads, dropout=0.1)
+
+        self.kp_prediction = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, int(hidden_dim/2)),
+            nn.ReLU(),
+            nn.Linear(int(hidden_dim/2), 2),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, images, belief_maps, positional_encoding):
+        # propagate inputs through ResNet-50 up to avg-pool layer
+        x = self.backbone.conv1(images)
+        x = self.backbone.bn1(x)
+        x = self.backbone.relu(x)
+        x = self.backbone.maxpool(x)
+
+        x = self.backbone.layer1(x)
+        x = self.backbone.layer2(x)
+        x = self.backbone.layer3(x)
+        x = self.backbone.layer4(x)
+
+        # convert from 2048 to 256 feature planes for the transformer
+        key = self.conv(x)    # [1, 256, 25, 25]  from original shape [1, 3, 800, 800] : feature size reduced by 1/32
+        key = key.flatten(2).permute(2,0,1) # [625, N, 256]
+        query = belief_maps.flatten(2) + positional_encoding # [N, 7, 256]
+        query = query.transpose(0,1)
+        attn_output, attn_output_weights = self.attention(query, key, key) #query[L,N,E], key[S,N,E], value[S,N,E], attn_output[L,N,E], attn_output_weights[N,L,S]
+        
+        x = attn_output.transpose(0, 1) # [N, 7, 256]
+        
+        kp = self.kp_prediction(x) # [N, 7, 2]
+        
+        return {'pred_kps': kp}

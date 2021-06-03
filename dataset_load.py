@@ -22,6 +22,7 @@ class RobotDataset(Dataset):
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         self.image_resize_800 = T.Resize(800)
+        self.image_resize_16 = T.Resize(16)
         self.embed_dim = embed_dim
 
 
@@ -33,6 +34,7 @@ class RobotDataset(Dataset):
         # image = (cv2.cvtColor(image, cv2.COLOR_BGR2RGB)).astype(np.float32)
         image_path = self.image_paths[idx]
         image = Image.open(image_path).convert('RGB') # [w, h]
+        w, h = image.size        
         image = self.image_transform(image) # after T.ToTensor() [3, h, w]
         with open(self.label_paths[idx]) as json_file:
             label = json.load(json_file)
@@ -40,8 +42,8 @@ class RobotDataset(Dataset):
         joint_velocities = label['objects'][0]['joint_velocities']
         joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
-        projected_keypoints = label['objects'][0]['projected_keypoints']        
-        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints)).type(torch.FloatTensor) # [h,w]        
+        projected_keypoints_wh = label['objects'][0]['projected_keypoints'] #[7, 2(w,h)]
+        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh)).type(torch.FloatTensor) # [7, h,w]        
         state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [7, num_features]
         _, num_features = state_embeddings.shape
         w_feature = np.sqrt(num_features).astype(np.uint8)
@@ -49,13 +51,15 @@ class RobotDataset(Dataset):
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
         pe = positional_encoding(256, 7) # [7, 256]
+        belief_maps = self.image_resize_16(belief_maps)
+        projected_keypoints_hw_norm = torch.tensor(np.array(projected_keypoints_wh)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [7, 2(h,w)]
         sample = {
             'image': image, 
             'joint_angles': joint_angles, 
             'joint_velocities': joint_velocities, 
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
-            'projected_keypoints': projected_keypoints,
+            'projected_keypoints': projected_keypoints_hw_norm,  # [7, 2(h,w)]
             'state_embeddings': state_embeddings.flatten(1),
             'image_path': image_path,
             'stacked_images': stacked_images,

@@ -58,7 +58,7 @@ def train(args, model, dataset, device, optimizer):
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
         state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
-        gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
+        gt_belief_maps_noise = sampled_batch['belief_maps_noise'] # [N, 7, 500, 500]
         pe = sampled_batch['positional_encoding'] # [N, 7, 256]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
@@ -70,7 +70,7 @@ def train(args, model, dataset, device, optimizer):
         pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        output = model(image, gt_belief_maps, pe) # Transformer style model
+        output = model(image, gt_belief_maps_noise, pe) # Transformer style model
         # output = model(stacked_images) # ResNet model
         loss = F.mse_loss(output['pred_kps'], projected_keypoints)
         loss.backward()

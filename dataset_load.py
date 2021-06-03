@@ -43,7 +43,8 @@ class RobotDataset(Dataset):
         joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints_wh = label['objects'][0]['projected_keypoints'] #[7, 2(w,h)]
-        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=0)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps_noise = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=5)).type(torch.FloatTensor) # [7, h,w]        
         state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [7, num_features]
         _, num_features = state_embeddings.shape
         w_feature = np.sqrt(num_features).astype(np.uint8)
@@ -59,6 +60,7 @@ class RobotDataset(Dataset):
             'joint_velocities': joint_velocities, 
             'joint_states': joint_states, 
             'belief_maps': belief_maps, 
+            'belief_maps_noise': belief_maps_noise,
             'projected_keypoints': projected_keypoints_hw_norm,  # [7, 2(h,w)]
             'state_embeddings': state_embeddings.flatten(1),
             'image_path': image_path,
@@ -71,13 +73,14 @@ class RobotDataset(Dataset):
 
 
 
-    def create_belief_map(self, image_resolution, pointsBelief, sigma=2):
+    def create_belief_map(self, image_resolution, pointsBelief, sigma=3, noise_std=0):
         '''
         This function is referenced from NVIDIA Dream/datasets.py
         
         image_resolution: image size (width x height)
         pointsBelief: list of points to draw in a 7x2 tensor
         sigma: the size of the point
+        noise_std: stddev of keypoint pixel level noise to improve regularization performance.
         
         returns a tensor of n_points x h x w with the belief maps
         '''
@@ -94,8 +97,8 @@ class RobotDataset(Dataset):
         w = int(sigma * 2)
 
         for i_point, point in enumerate(pointsBelief):
-            pixel_u = int(point[0]) # width axis
-            pixel_v = int(point[1]) # height axis
+            pixel_u = int(point[0]) + np.random.randn()*noise_std # width axis
+            pixel_v = int(point[1]) + np.random.randn()*noise_std # height axis
             array = np.zeros((image_height, image_width))
 
             # TODO makes this dynamics so that 0,0 would generate a belief map.

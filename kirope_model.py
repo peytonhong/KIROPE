@@ -200,7 +200,14 @@ class KIROPE_Attention(nn.Module):
 
         # create conversion layer
         self.conv = nn.Conv2d(2048, hidden_dim, 1) # [N, hidden_dim, 25, 25]
-
+        
+        self.query_MLP = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Sigmoid(),
+        )
+        
         self.attention = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=nheads, dropout=0.1)
 
         self.kp_prediction = nn.Sequential(
@@ -226,8 +233,8 @@ class KIROPE_Attention(nn.Module):
 
         # convert from 2048 to 256 feature planes for the transformer
         key = self.conv(x)    # [1, 256, 25, 25]  from original shape [1, 3, 800, 800] : feature size reduced by 1/32
-        key = key.flatten(2).permute(2,0,1) # [625, N, 256]
-        query = belief_maps.flatten(2) + positional_encoding # [N, 7, 256]
+        key = key.flatten(2).permute(2,0,1) # [625, N, 256]        
+        query = self.query_MLP(belief_maps.flatten(2))# + positional_encoding # [N, 7, 256]
         query = query.transpose(0,1)
         attn_output, attn_output_weights = self.attention(query, key, key) #query[L,N,E], key[S,N,E], value[S,N,E], attn_output[L,N,E], attn_output_weights[N,L,S]
         

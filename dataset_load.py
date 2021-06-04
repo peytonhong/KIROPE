@@ -43,10 +43,10 @@ class RobotDataset(Dataset):
         joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints_wh = label['objects'][0]['projected_keypoints'] #[7, 2(w,h)]
-        belief_maps = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=0)).type(torch.FloatTensor) # [7, h,w]        
-        belief_maps = self.image_resize_16(belief_maps)
-        belief_maps_noise = torch.tensor(self.create_belief_map(image.shape[1:], projected_keypoints_wh, noise_std=5)).type(torch.FloatTensor) # [7, h,w]        
-        belief_maps_noise = self.image_resize_16(belief_maps_noise)
+        belief_maps = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh, noise_std=0)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps = self.resize_belief_map(belief_maps, self.image_resize_16)
+        belief_maps_noise = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh, noise_std=5)).type(torch.FloatTensor) # [7, h,w]        
+        belief_maps_noise = self.resize_belief_map(belief_maps_noise, self.image_resize_16)
         state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [7, num_features]
         _, num_features = state_embeddings.shape
         w_feature = np.sqrt(num_features).astype(np.uint8)
@@ -54,15 +54,14 @@ class RobotDataset(Dataset):
         image = self.image_resize_800(image) # [3, 800, 800]
         stacked_images = torch.cat((image, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
         pe = positional_encoding(256, 7) # [7, 256]
-        
         projected_keypoints_hw_norm = torch.tensor(np.array(projected_keypoints_wh)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [7, 2(h,w)]
         sample = {
             'image': image, 
             'joint_angles': joint_angles, 
             'joint_velocities': joint_velocities, 
             'joint_states': joint_states, 
-            'belief_maps': belief_maps, 
-            'belief_maps_noise': belief_maps_noise,
+            'belief_maps': belief_maps,  # [7, 16, 16]
+            'belief_maps_noise': belief_maps_noise, # [7, 16, 16]
             'projected_keypoints': projected_keypoints_hw_norm,  # [7, 2(h,w)]
             'state_embeddings': state_embeddings.flatten(1),
             'image_path': image_path,
@@ -72,10 +71,14 @@ class RobotDataset(Dataset):
         return sample
 
 
+    def resize_belief_map(self, belief_maps, T_resize):
+        belief_maps = T_resize(belief_maps)
+        for i in range(len(belief_maps)):
+            belief_maps[i] /= belief_maps[i].max() # peak value normalize to have 1 for the peak pixel
+        return belief_maps
 
 
-
-    def create_belief_map(self, image_resolution, pointsBelief, sigma=3, noise_std=0):
+    def create_belief_map(self, image_resolution, pointsBelief, sigma=10, noise_std=0):
         '''
         This function is referenced from NVIDIA Dream/datasets.py
         

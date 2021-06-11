@@ -4,7 +4,7 @@ import random
 import colorsys
 import subprocess 
 import math
-import pybullet as p 
+import pybullet as p
 # import pybullet_data
 import numpy as np
 import simplejson as json

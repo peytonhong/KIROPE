@@ -123,17 +123,17 @@ def get_my_keypoints(camera_entity, robotId, joint_world_position, opt):
 
     return jointKeypoints
 
-def get_joint_world_position(bidyUniqueId):
+def get_joint_world_position(bodyUniqueId):
     # Lets update the pose of the objects in nvisii 
     link_world_state = []
-    for link_num in range(p.getNumJoints(bidyUniqueId)+1):
+    for link_num in range(p.getNumJoints(bodyUniqueId)+1):
         # get the pose of the objects
         if link_num==0: # base
-            link_state = p.getBasePositionAndOrientation(bodyUniqueId=bidyUniqueId)      
+            link_state = p.getBasePositionAndOrientation(bodyUniqueId=bodyUniqueId)      
             pos_world = link_state[0]
             rot_world = link_state[1]
         else: # link
-            link_state = p.getLinkState(bodyUniqueId=bidyUniqueId, linkIndex=link_num-1)
+            link_state = p.getLinkState(bodyUniqueId=bodyUniqueId, linkIndex=link_num-1)
             pos_world = add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
             rot_world = link_state[5] # world orientation of the URDF link frame
         link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [8, 2]

@@ -505,11 +505,11 @@ for i in tqdm(range(int(opt.nb_frames))):
             freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
         targetJointPoses = [clamping(lower_limit[k], 1.57*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
 
-        for l in range(numJoints):
+        for j in range(numJoints):
             p.setJointMotorControl2(bodyIndex=kukaId,
-                                    jointIndex=l,
+                                    jointIndex=j,
                                     controlMode=p.POSITION_CONTROL,
-                                    targetPosition=targetJointPoses[l],
+                                    targetPosition=targetJointPoses[j],
                                     targetVelocity=0,
                                     force=5000,
                                     positionGain=0.1,

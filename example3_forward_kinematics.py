@@ -36,11 +36,11 @@ while 1:
     t += dt
     targetJointPoses = [clamping(lower_limit[i], signs[i]*np.sin(freqs[i]*t), upper_limit[i]) for i in range(numJoints)]
 
-    for i in range(numJoints):
+    for j in range(numJoints):
       p.setJointMotorControl2(bodyIndex=kukaId,
-                              jointIndex=i,
+                              jointIndex=j,
                               controlMode=p.POSITION_CONTROL,
-                              targetPosition=targetJointPoses[i],
+                              targetPosition=targetJointPoses[j],
                               targetVelocity=0,
                               force=5000,
                               positionGain=0.1,

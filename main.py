@@ -19,6 +19,7 @@ import cv2
 from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
+from utils.digital_twin import DigitalTwin
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -39,6 +40,7 @@ def argparse_args():
   parser.add_argument('command', help="'train' or 'evaluate'")
   parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
   parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
+  parser.add_argument('--digital_twin', default=False, type=int, help="True: run digital twin simulation on testing")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -57,7 +59,7 @@ def train(args, model, dataset, device, optimizer):
 
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
         image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-        state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
+        # state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
         gt_belief_maps_noise = sampled_batch['belief_maps_noise'] # [N, 7, 500, 500]
         pe = sampled_batch['positional_encoding'] # [N, 7, 256]
         # joint_angles = sampled_batch['joint_angles'] 
@@ -66,7 +68,7 @@ def train(args, model, dataset, device, optimizer):
         projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
         # image_path = sampled_batch['image_path']
         # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
-        image, state_embeddings = image.to(device), state_embeddings.to(device)
+        image, gt_belief_maps_noise = image.to(device), gt_belief_maps_noise.to(device)
         pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
@@ -82,7 +84,7 @@ def train(args, model, dataset, device, optimizer):
 
     return train_loss_sum
 
-def test(args, model, dataset, device):
+def test(args, model, dataset, device, digital_twin):
 
     model.eval()
 
@@ -92,7 +94,7 @@ def test(args, model, dataset, device):
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-            state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
+            # state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
             gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
             pe = sampled_batch['positional_encoding'] # [N, 7, 256]
             # joint_angles = sampled_batch['joint_angles'] 
@@ -102,16 +104,19 @@ def test(args, model, dataset, device):
             image_path = sampled_batch['image_path']
             # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
 
-            image, state_embeddings = image.to(device), state_embeddings.to(device)
+            image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
             pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
             # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
-            output = model(image, state_embeddings, pe)
+            output = model(image, gt_belief_maps, pe) # # [N, 7, 2(h,w)]
             # output = model(stacked_images)
             
             loss = F.mse_loss(output['pred_kps'], projected_keypoints)
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
+
+            if args.digital_twin:
+                keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1]) # w, h
             
             visualize_result(image_path[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints[0].cpu().numpy())
 
@@ -199,6 +204,11 @@ def main(args):
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
+    DT = DigitalTwin(urdf_path="urdfs/kuka_iiwa/model.urdf", 
+                    mesh_path="urdfs/kuka_iiwa/meshes",
+                    headless=True,
+                    save_images=False)
+
     if args.command == 'train':
         # CHECKPOINT_DIR
         CHECKPOINT_DIR = 'checkpoints'
@@ -211,7 +221,7 @@ def main(args):
         
         for e in range(args.num_epochs):
             train_loss = train(args, model, train_iterator, device, optimizer)           
-            test_loss = test(args, model, test_iterator, device) # include visulaization result checking
+            test_loss = test(args, model, test_iterator, device, DT) # include visulaization result checking
             summary_note = f'Epoch: {e:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
             if best_test_loss > test_loss:
@@ -220,9 +230,9 @@ def main(args):
 
             
 
-    else: # evaluate mode
-        model = torch.load('./checkpoints/model_best.pth.tar')
-        test_loss = test(args, model, test_iterator, device)
+    else: # evaluate mode        
+        model = torch.load('./checkpoints/model_best.pth.tar')        
+        test_loss = test(args, model, test_iterator, device, DT)
         print(f'Test Loss: {test_loss:.10f}')
 
 

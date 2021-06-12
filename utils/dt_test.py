@@ -12,3 +12,7 @@ kukaId_1 = p.loadURDF("../urdfs/kuka_iiwa/model.urdf", [0, 0, 0], useFixedBase=T
 kukaId_2 = p.loadURDF("../urdfs/kuka_iiwa/model.urdf", [0, 0, 0], useFixedBase=True, physicsClientId=physicsClient2)
 p.setGravity(0, 0, -9.81, physicsClientId=physicsClient1)
 p.setGravity(0, 0, -9.81, physicsClientId=physicsClient2)
+jointStates = p.getJointStates(kukaId_1, range(7), physicsClientId=physicsClient1)
+jointAngles = [jointStates[i][0] for i in range(len(jointStates))]
+print(jointStates)
+print(jointAngles)

@@ -40,7 +40,7 @@ def argparse_args():
   parser.add_argument('command', help="'train' or 'evaluate'")
   parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
   parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
-  parser.add_argument('--digital_twin', default=False, type=int, help="True: run digital twin simulation on testing")
+  parser.add_argument('--digital_twin', default=False, type=str2bool, help="True: run digital twin simulation on testing")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -97,7 +97,7 @@ def test(args, model, dataset, device, digital_twin):
             # state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
             gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
             pe = sampled_batch['positional_encoding'] # [N, 7, 256]
-            # joint_angles = sampled_batch['joint_angles'] 
+            joint_angles_gt = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
             # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        
             projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
@@ -114,18 +114,68 @@ def test(args, model, dataset, device, digital_twin):
             
             test_loss_sum += loss.item()*len(sampled_batch)
             num_tested_data += len(sampled_batch)
-
-            if args.digital_twin:
-                keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1]) # w, h
             
-            visualize_result(image_path[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints[0].cpu().numpy())
-
+            if args.digital_twin:
+                joint_angles_gt = [joint_angles_gt[i][0].item() for i in range(len(joint_angles_gt))]
+                # pred_keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1]) # w, h
+                pred_keypoints = digital_twin.forward(projected_keypoints[0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h GT value input for validation
+                visualize_result(image_path[0], pred_keypoints, projected_keypoints[0].cpu().numpy())
+            else:
+                visualize_result(image_path[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints[0].cpu().numpy())
+            
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
 
     return test_loss_sum
 
+
+def create_batch_belief_map(image_resolution, keypoints, sigma=10, noise_std=0):
+    '''
+    This function is referenced from NVIDIA Dream/datasets.py
+    
+    image_resolution: image size (height x width)
+    keypoints: list of keypoints to draw in a 7x2 tensor
+    sigma: the size of the point
+    noise_std: stddev of keypoint pixel level noise to improve regularization performance.
+    
+    returns a tensor of n_points x h x w with the belief maps
+    '''
+    
+    # Input argument handling
+    assert (
+        len(image_resolution) == 2
+    ), 'Expected "image_resolution" to have length 2, but it has length {}.'.format(
+        len(image_resolution)
+    )
+    image_height, image_width = image_resolution
+    out = np.zeros((len(keypoints), image_height, image_width))
+
+    w = int(sigma * 2)
+
+    for i_point, point in enumerate(keypoints):
+        pixel_u = int(point[0] + np.random.randn()*noise_std) # width axis
+        pixel_v = int(point[1] + np.random.randn()*noise_std) # height axis
+        array = np.zeros((image_height, image_width))
+
+        # TODO makes this dynamics so that 0,0 would generate a belief map.
+        if (
+            pixel_u - w >= 0
+            and pixel_u + w < image_width
+            and pixel_v - w >= 0
+            and pixel_v + w < image_height
+        ):
+            for i in range(pixel_u - w, pixel_u + w + 1):
+                for j in range(pixel_v - w, pixel_v + w + 1):
+                    array[j, i] = np.exp(
+                        -(
+                            ((i - pixel_u) ** 2 + (j - pixel_v) ** 2)
+                            / (2 * (sigma ** 2))
+                        )
+                    )
+        out[i_point] = array
+
+    return out
 
 def extract_keypoints_from_belief_maps(belief_maps):    
     keypoints = []

@@ -20,7 +20,7 @@ opt.height = 500
 opt.noise = False
 opt.frame_freq = 8
 opt.nb_frames = 10000
-opt.inputf = 'annotation/test'
+opt.inputf = 'annotation/test_no_rand_obj'
 opt.outf = 'joint_alignment'
 opt.idx = 999
 
@@ -360,7 +360,7 @@ jointAngles = np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float64)
 eps = np.linspace(1e-5, 1e-5, 7)
 iterations = 100 # This value can be adjusted.
 for iter in range(iterations):    
-    
+    print('jointAngles:', jointAngles)
     # get joint 2d keypoint from 3d points and camera model
     keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
     # print('keypoints: ', keypoints)

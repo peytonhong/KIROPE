@@ -78,12 +78,12 @@ class RobotDataset(Dataset):
         return belief_maps
 
 
-    def create_belief_map(self, image_resolution, pointsBelief, sigma=10, noise_std=0):
+    def create_belief_map(self, image_resolution, keypoints, sigma=10, noise_std=0):
         '''
         This function is referenced from NVIDIA Dream/datasets.py
         
-        image_resolution: image size (width x height)
-        pointsBelief: list of points to draw in a 7x2 tensor
+        image_resolution: image size (height x width)
+        keypoints: list of keypoints to draw in a 7x2 tensor
         sigma: the size of the point
         noise_std: stddev of keypoint pixel level noise to improve regularization performance.
         
@@ -97,11 +97,11 @@ class RobotDataset(Dataset):
             len(image_resolution)
         )
         image_height, image_width = image_resolution
-        out = np.zeros((len(pointsBelief), image_height, image_width))
+        out = np.zeros((len(keypoints), image_height, image_width))
 
         w = int(sigma * 2)
 
-        for i_point, point in enumerate(pointsBelief):
+        for i_point, point in enumerate(keypoints):
             pixel_u = int(point[0] + np.random.randn()*noise_std) # width axis
             pixel_v = int(point[1] + np.random.randn()*noise_std) # height axis
             array = np.zeros((image_height, image_width))

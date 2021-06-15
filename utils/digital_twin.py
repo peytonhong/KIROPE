@@ -224,23 +224,26 @@ class DigitalTwin():
         self.A = np.vstack( (np.hstack((np.eye(nj), np.eye(nj)*self.dT)), 
                             np.hstack((np.zeros((nj,nj)), np.eye(nj))))) # [2*numJoints, 2*numJoints]
         self.P = np.eye(2*nj)
-        self.Q = np.eye(2*nj)
+        Q_upper = np.eye(nj)*0.1     # angle noise
+        Q_lower = np.eye(nj)*0.0001 # angular velocity noise
+        self.Q = np.vstack( (np.hstack((Q_upper, np.zeros((nj,nj)))), 
+                            np.hstack((np.zeros((nj,nj)), Q_lower)))) # [2*numJoints, 2*numJoints]
         self.R = np.eye(nj)
         
         self.X = np.hstack((self.jointAngles_main, self.jointVelocities_main)).reshape(-1,1) #[2*numJoints, 1]
         self.H = np.hstack((np.eye(nj), np.zeros((nj,nj)))) # [numJoints, 2*numJoints]
 
-        self.jpnp_max_iterations = 100 
+        self.jpnp_max_iterations = 100
 
 
-    def forward(self, target_keypoints):
+    def forward(self, target_keypoints, joint_angles_gt):
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
         target_keypoints = target_keypoints*[self.opt.width, self.opt.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
         self.jointAngles_jpnp = self.jointAngles_main
         target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [14]
-        # print('target_keypoints: ', target_keypoints)
+        
         
         # eps = 1e-6 # epsilon for Jacobian approximation
         eps = np.linspace(1e-5, 1e-5, self.numJoints)
@@ -249,7 +252,7 @@ class DigitalTwin():
             
             # get joint 2d keypoint from 3d points and camera model
             keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
-            # print('keypoints: ', keypoints)
+                        
             # Jacobian approximation: keypoint rate (변화량)
             Jacobian = np.zeros((self.numJoints*2, self.numJoints))
             for col in range(self.numJoints):
@@ -301,18 +304,32 @@ class DigitalTwin():
                 eps *= 0.9
             if criteria < 1e-2:
                 break
+        
+        angle_error = ((self.jointAngles_main - self.jointAngles_jpnp)**2).mean()
 
-                
+        if angle_error < 5:
+            self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria
+            self.R = np.eye(self.numJoints)*0.00001
+        else:
+            self.R = np.eye(self.numJoints)*100000 # invalid measurement
+        
         # Update Kalman filter for self.jointAngles_main
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
-        self.X = self.X + K @ (self.jointAngles_jpnp - self.H @ self.X)
+        
+        self.X = self.X + K @ (self.jointAngles_main.reshape(-1,1) - self.H @ self.X)
+        
         self.P = (np.eye(2*self.numJoints) - K @ self.H) @ self.P
-        self.X = self.A @ self.X
-        self.P = self.A @ self.P @ np.transpose(self.A) + self.Q
-
         # filtered joint angle
         self.jointAngles_main = self.X[:self.numJoints].reshape(-1)
         self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
+        self.X = self.A @ self.X
+        self.P = self.A @ self.P @ np.transpose(self.A) + self.Q
+        
+    
+        print('jointAngles_main: ', self.jointAngles_main)
+        print('joint_angles_gt:  ', joint_angles_gt)
+        print('angle error: ', ((self.jointAngles_main - np.array(joint_angles_gt))**2).mean())
+        
         # PyBullet main simulation update
         steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame
         for _ in range(steps_per_frame):
@@ -321,10 +338,12 @@ class DigitalTwin():
                                         jointIndex=j,
                                         controlMode=p.POSITION_CONTROL,
                                         targetPosition=self.jointAngles_main[j],
-                                        targetVelocity=self.jointVelocities_main[j],
-                                        force=5000,
+                                        # targetVelocity=self.jointVelocities_main[j],
+                                        # targetPosition=joint_angles_gt[j],
+                                        targetVelocity=0,
+                                        force=1000,
                                         positionGain=0.1,
-                                        velocityGain=0.5,
+                                        velocityGain=0.1,
                                         physicsClientId=self.physicsClient_main
                                         )
             p.stepSimulation(physicsClientId=self.physicsClient_main)
@@ -334,7 +353,8 @@ class DigitalTwin():
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
         keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, camera_name = 'camera')
-
+        keypoints = keypoints.reshape(-1,2)[:, ::-1] # [7, 2] (h, w)
+        keypoints /= [self.opt.height, self.opt.width]
         return keypoints
 
 
@@ -454,9 +474,8 @@ class DigitalTwin():
 
         link_world_state = self.get_joint_world_position(bodyUniqueId, physicsClientId)   # [num_link, position, rotation]
         jointPositions = link_world_state[1:, 0] #[7, 3]
-
         keypoints = []
-        points_cam = []
+        points_cam = []        
         for j in range(len(jointPositions)):        
             pos_m = nvisii.vec4(
                 jointPositions[j][0],
@@ -471,8 +490,11 @@ class DigitalTwin():
             p_image = p_image * nvisii.vec2(1,-1)        
             p_image = (p_image + nvisii.vec2(1,1)) * 0.5
             keypoints.append([p_image[0]*opt.width, p_image[1]*opt.height])
+            # keypoints.append([p_image[0], p_image[1]])
             points_cam.append([p_cam[0],p_cam[1],p_cam[2]])            
+        
         keypoints = np.array([keypoints[i][j] for i in range(len(keypoints)) for j in range(2)])  # [14]
+        
         return keypoints
 
 

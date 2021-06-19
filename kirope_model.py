@@ -235,6 +235,7 @@ class KIROPE_Attention(nn.Module):
         key = self.conv(x)    # [1, 256, 25, 25]  from original shape [1, 3, 800, 800] : feature size reduced by 1/32
         key = key.flatten(2).permute(2,0,1) # [625, N, 256]        
         query = self.query_MLP(belief_maps.flatten(2)) + positional_encoding # [N, 7, 256]
+        # query = positional_encoding
         query = query.transpose(0,1)
         attn_output, attn_output_weights = self.attention(query, key, key) #query[L,N,E], key[S,N,E], value[S,N,E], attn_output[L,N,E], attn_output_weights[N,L,S]
         

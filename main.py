@@ -117,7 +117,7 @@ def test(args, model, dataset, device, digital_twin):
             
             if args.digital_twin:
                 joint_angles_gt = [joint_angles_gt[i][0].item() for i in range(len(joint_angles_gt))]
-                # pred_keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1]) # w, h
+                # pred_keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h
                 pred_keypoints = digital_twin.forward(projected_keypoints[0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h GT value input for validation
                 visualize_result(image_path[0], pred_keypoints, projected_keypoints[0].cpu().numpy())
             else:
@@ -231,6 +231,8 @@ def main(args):
     
     hidden_dim = 256 # fixed for state embiddings
     lr = 1e-4           # learning rate
+    # model_path = './checkpoints/model_best.pth.tar'
+    model_path = './checkpoints/attention_model/attention_normal.tar'
 
     model = KIROPE_Attention(num_joints=7, hidden_dim=hidden_dim)
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
@@ -250,7 +252,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     train_dataset = RobotDataset(data_dir='annotation/train_many_obj', embed_dim=hidden_dim)
-    test_dataset = RobotDataset(data_dir='annotation/test_many_obj', embed_dim=hidden_dim)
+    test_dataset = RobotDataset(data_dir='annotation/test_no_rand_obj', embed_dim=hidden_dim)
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
@@ -276,12 +278,12 @@ def main(args):
             print(summary_note)
             if best_test_loss > test_loss:
                 best_test_loss = test_loss
-                torch.save(model, './checkpoints/model_best.pth.tar')
+                torch.save(model, model_path)
 
             
 
     else: # evaluate mode        
-        model = torch.load('./checkpoints/model_best.pth.tar')        
+        model = torch.load(model_path)
         test_loss = test(args, model, test_iterator, device, DT)
         print(f'Test Loss: {test_loss:.10f}')
 

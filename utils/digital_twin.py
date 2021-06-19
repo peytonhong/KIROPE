@@ -13,7 +13,7 @@ from torch.nn.functional import hinge_embedding_loss
 from tqdm import tqdm
 from glob import glob
 import cv2
-
+import csv
 
 class DigitalTwin():
 
@@ -234,9 +234,15 @@ class DigitalTwin():
         self.H = np.hstack((np.eye(nj), np.zeros((nj,nj)))) # [numJoints, 2*numJoints]
 
         self.jpnp_max_iterations = 100
+        self.iters = 0 # iteration steps for forward function calls (iters is used to name the saved image file)
+
+        with open('./utils/dt_debug.csv', 'w') as  f: 
+            writer = csv.writer(f, delimiter=',')
+            writer.writerow(['iter', 'criteria', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
 
-    def forward(self, target_keypoints, joint_angles_gt):
+    def forward(self, target_keypoints, joint_angles_gt):       
+
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
         target_keypoints = target_keypoints*[self.opt.width, self.opt.height] # expand keypoint range to full width, height
@@ -244,74 +250,16 @@ class DigitalTwin():
         self.jointAngles_jpnp = self.jointAngles_main
         target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [14]
         
-        
-        # eps = 1e-6 # epsilon for Jacobian approximation
-        eps = np.linspace(1e-5, 1e-5, self.numJoints)
-        
-        for iter in range(self.jpnp_max_iterations):    
-            
-            # get joint 2d keypoint from 3d points and camera model
-            keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
-                        
-            # Jacobian approximation: keypoint rate (변화량)
-            Jacobian = np.zeros((self.numJoints*2, self.numJoints))
-            for col in range(self.numJoints):
-                eps_array = np.zeros(self.numJoints)
-                eps_array[col] = eps[col]
-                keypoints_eps = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
-                Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 2, axis=0)
-            dy = np.array(target_keypoints - keypoints)
-            dx = np.linalg.pinv(Jacobian)@dy
-            self.jointAngles_jpnp += dx # all joint angle update
-
-            for j in range(self.numJoints):
-                p.resetJointState(bodyUniqueId=self.robotId_jpnp,
-                                jointIndex=j,
-                                targetValue=(self.jointAngles_jpnp[j]),
-                                physicsClientId=self.physicsClient_jpnp
-                                )    
-            p.stepSimulation(physicsClientId=self.physicsClient_jpnp)
-            link_world_state = self.get_joint_world_position(self.robotId_jpnp, self.physicsClient_jpnp)   # [num_link, position, rotation]
-            for link_num in range(len(link_world_state)):       
-                # get the nvisii entity for that object
-                obj_entity = self.link_entities[link_num]
-                obj_entity.get_transform().set_position(link_world_state[link_num][0])        
-                obj_entity.get_transform().set_rotation(link_world_state[link_num][1]) 
-            
-            
-            # print(f'iteration: {str(iter).zfill(5)}/{str(iterations).zfill(5)}')
-
-
-
-            # get_my_keypoints(camera_entity=camera, robotId=robotId_main, joint_world_position=joint_world_position, self.opt=self.opt)
-            if self.save_images:
-                if self.make_joint_sphere:
-                    self.create_joint_markers(self.joint_entities, link_world_state[1:][0])
-
-                nvisii.render_to_file(
-                    width=int(self.opt.width), 
-                    height=int(self.opt.height), 
-                    samples_per_pixel=int(self.opt.spp),
-                    file_path=f"{self.opt.outf}/{str(iter).zfill(5)}.png"
-                )
-                iter_image_path = f"{self.opt.outf}/{str(iter).zfill(5)}.png"
-                target_image_path = f"{self.opt.inputf}/{str(self.opt.idx).zfill(5)}.png"
-                keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
-                self.save_keypoint_visualize_image(iter_image_path, target_image_path, keypoints.reshape(7,2), target_keypoints.reshape(7,2), iter)
-            criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
-            # print('iter: {}, criteria: {}'.format(iter, criteria))
-            if criteria < 1e-1:
-                eps *= 0.9
-            if criteria < 1e-2:
-                break
-        
-        angle_error = ((self.jointAngles_main - self.jointAngles_jpnp)**2).mean()
-
-        if angle_error < 5:
-            self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria
+        # Joint PnP
+        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.jointAngles_jpnp)      
+        self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp(target_keypoints, self.jointAngles_jpnp)      
+        print('angle error: ', angle_error, retry, iter)
+        # Kalman filter        
+        self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
+        if angle_error < 5.:            
             self.R = np.eye(self.numJoints)*0.00001
         else:
-            self.R = np.eye(self.numJoints)*100000 # invalid measurement
+            self.R = np.eye(self.numJoints)*1 # invalid measurement
         
         # Update Kalman filter for self.jointAngles_main
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
@@ -325,10 +273,7 @@ class DigitalTwin():
         self.X = self.A @ self.X
         self.P = self.A @ self.P @ np.transpose(self.A) + self.Q
         
-    
-        print('jointAngles_main: ', self.jointAngles_main)
-        print('joint_angles_gt:  ', joint_angles_gt)
-        print('angle error: ', ((self.jointAngles_main - np.array(joint_angles_gt))**2).mean())
+        jointAngle_command = self.jointAngles_main
         
         # PyBullet main simulation update
         steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame
@@ -355,8 +300,159 @@ class DigitalTwin():
         keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, camera_name = 'camera')
         keypoints = keypoints.reshape(-1,2)[:, ::-1] # [7, 2] (h, w)
         keypoints /= [self.opt.height, self.opt.width]
+
+        self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
+        self.iters += 1
+
         return keypoints
 
+    def save_result_image(self, jointAngles_jpnp, target_keypoints):        
+        # reset robot joint with new angles
+        for j in range(self.numJoints):
+            p.resetJointState(bodyUniqueId=self.robotId_jpnp,
+                            jointIndex=j,
+                            targetValue=(jointAngles_jpnp[j]),
+                            physicsClientId=self.physicsClient_jpnp
+                            )    
+        p.stepSimulation(physicsClientId=self.physicsClient_jpnp)
+        link_world_state = self.get_joint_world_position(self.robotId_jpnp, self.physicsClient_jpnp)   # [num_link, position, rotation]
+        for link_num in range(len(link_world_state)):       
+            # get the nvisii entity for that object
+            obj_entity = self.link_entities[link_num]
+            obj_entity.get_transform().set_position(link_world_state[link_num][0])
+            obj_entity.get_transform().set_rotation(link_world_state[link_num][1])
+        
+        
+        # print(f'iteration: {str(iter).zfill(5)}/{str(iterations).zfill(5)}')
+
+
+
+        # get_my_keypoints(camera_entity=camera, robotId=robotId_main, joint_world_position=joint_world_position, self.opt=self.opt)
+        
+        if self.make_joint_sphere:
+            self.create_joint_markers(self.joint_entities, link_world_state[1:][0])
+
+        nvisii.render_to_file(
+            width=int(self.opt.width), 
+            height=int(self.opt.height), 
+            samples_per_pixel=int(self.opt.spp),
+            file_path=f"{self.opt.outf}/{str(iter).zfill(5)}.png"
+        )
+        iter_image_path = f"{self.opt.inputf}/{str(iter).zfill(5)}.png"        
+        print('iter_image_path', iter_image_path)
+        target_image_path = f"{self.opt.inputf}/{str(self.opt.idx).zfill(5)}.png"
+        keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+        self.save_keypoint_visualize_image(iter_image_path, target_image_path, keypoints.reshape(7,2), target_keypoints.reshape(7,2), iter)
+
+    def joint_pnp(self, target_keypoints, jointAngles_jpnp):
+
+        jointAngles_init = jointAngles_jpnp.copy()        
+
+        for retry in range(10):
+            eps = np.linspace(1e-6, 1e-6, self.numJoints)
+            if not retry == 0:
+                angle_noise = np.random.randn(self.numJoints)*0.001
+                jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+            for iter in range(self.jpnp_max_iterations):
+                # get joint 2d keypoint from 3d points and camera model
+                keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                            
+                # Jacobian approximation: keypoint rate (변화량)
+                Jacobian = np.zeros((self.numJoints*2, self.numJoints))
+                for col in range(self.numJoints):
+                    eps_array = np.zeros(self.numJoints)
+                    eps_array[col] = eps[col]
+                    keypoints_eps = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                    Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 2, axis=0)
+                
+                dy = np.array(target_keypoints - keypoints)
+                dx = np.linalg.pinv(Jacobian)@dy
+                jointAngles_jpnp += dx # all joint angle update
+                
+                criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
+                
+                if criteria < 1e-1:
+                    eps *= 0.9
+                if criteria < 1e-2:
+                    break
+            
+            angle_error = np.linalg.norm(jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)/self.numJoints
+            
+            if angle_error < 1.:
+                break
+            
+        if self.save_images:
+            self.save_result_image(jointAngles_jpnp, target_keypoints)
+        
+        return jointAngles_jpnp, angle_error, retry, iter
+
+
+    def joint_pnp_with_LM(self, target_keypoints, jointAngles_jpnp):
+
+        jointAngles_init = jointAngles_jpnp.copy()
+        eps = np.linspace(1e-5, 1e-5, self.numJoints)
+
+        for retry in range(10):
+            if not retry == 0:
+                jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+            for iter in range(self.jpnp_max_iterations):
+                # get joint 2d keypoint from 3d points and camera model
+                keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                            
+                # Jacobian approximation: keypoint rate (변화량)
+                Jacobian = np.zeros((self.numJoints*2, self.numJoints))
+                for col in range(self.numJoints):
+                    eps_array = np.zeros(self.numJoints)
+                    eps_array[col] = eps[col]
+                    keypoints_eps = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                    Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 2, axis=0)
+                # dy = np.array(target_keypoints - keypoints)
+                # dx = np.linalg.pinv(Jacobian)@dy
+                # self.jointAngles_jpnp += dx # all joint angle update
+                if iter == 0:
+                    lam = np.mean(np.diag(np.transpose(Jacobian)@Jacobian))*1e-3         # LM Algorithm
+                dy = np.array(keypoints - target_keypoints).reshape(-1,1)
+                dx = - np.linalg.inv(np.transpose(Jacobian)@Jacobian + lam*np.eye(self.numJoints)) @ np.transpose(Jacobian) @ dy # LM Algorithm
+                dx = dx.reshape(-1)
+                jointAngles_new = jointAngles_jpnp + dx # all joint angle update
+                keypoints_new = self.get_joint_keypoints_from_angles(jointAngles_new, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
+                    jointAngles_jpnp += dx
+                    lam /= 10
+                else:
+                    lam *= 10
+                    # continue
+                criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
+                
+                # if criteria < 1e-1:
+                #     eps *= 0.9
+                if criteria < 1e-2:
+                    break
+
+            angle_error = ((jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)**2).mean()
+            if angle_error < 1.:
+                break
+            else:
+                angle_noise = np.random.randn(self.numJoints)*0.01
+                
+
+        if self.save_images:
+            self.save_result_image(jointAngles_jpnp, target_keypoints)
+        
+        return jointAngles_jpnp, angle_error, retry, iter
+
+    def save_debug_file(self, data):
+        iter, criteria, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
+        with open('./utils/dt_debug.csv', 'a') as  f: 
+            writer = csv.writer(f, delimiter=',')
+            message = np.hstack((iter, 
+                                criteria, 
+                                np.array(joint_angles_gt).reshape(-1), 
+                                np.array(jointAngle_command).reshape(-1), 
+                                np.array(jointAngles_main).reshape(-1), 
+                                np.array(jointAngles_jpnp).reshape(-1),
+                                ))
+            writer.writerow(message)
 
 
     def save_keypoint_visualize_image(self, iter_image_path, target_image_path, iter_keypoints, target_keypoints, iter):

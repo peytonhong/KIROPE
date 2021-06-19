@@ -11,6 +11,7 @@ import simplejson as json
 from tqdm import tqdm
 from glob import glob
 import cv2
+import time
 
 opt = lambda : None
 # opt.nb_objects = 2
@@ -172,6 +173,8 @@ def get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera'):
         points_cam.append([p_cam[0],p_cam[1],p_cam[2]])            
     keypoints = np.array([keypoints[i][j] for i in range(len(keypoints)) for j in range(2)])  # [14]
     return keypoints
+
+
 
 # show an interactive window, and use "lazy" updates for faster object creation time 
 nvisii.initialize(headless=False, lazy_updates=True)
@@ -346,7 +349,7 @@ for link_num in range(len(link_meshes)):
     link_entities.append(link_entity)
 
 
-
+# init_time = time.time()
 # Lets run the simulation for joint alignment. 
 label_paths = sorted(glob(os.path.join(opt.inputf, '*.json')))
 with open(label_paths[opt.idx]) as json_file:
@@ -360,7 +363,7 @@ jointAngles = np.array([0, 0, 0, 0, 0, 0, 0], dtype=np.float64)
 eps = np.linspace(1e-5, 1e-5, 7)
 iterations = 100 # This value can be adjusted.
 for iter in range(iterations):    
-    print('jointAngles:', jointAngles)
+    print(f'iter: {iter}, jointAngles: {jointAngles}')
     # get joint 2d keypoint from 3d points and camera model
     keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
     # print('keypoints: ', keypoints)
@@ -371,9 +374,25 @@ for iter in range(iterations):
         eps_array[col] = eps[col]
         keypoints_eps = get_joint_keypoints_from_angles(jointAngles+eps_array, opt, camera_name = 'camera')
         Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 2, axis=0)
-    dy = np.array(target_keypoints - keypoints)
-    dx = np.linalg.pinv(Jacobian)@dy
-    jointAngles += dx # all joint angle update
+        
+    # dy = np.array(target_keypoints - keypoints)
+    # dx = np.linalg.pinv(Jacobian)@dy
+    # jointAngles_jpnp += dx # all joint angle update
+
+    # LM Algorithm
+    if iter == 0:
+        lam = np.mean(np.diag(np.transpose(Jacobian)@Jacobian))*1e-3         # LM Algorithm
+    dy = np.array(keypoints - target_keypoints).reshape(-1,1)
+    dx = - np.linalg.inv(np.transpose(Jacobian)@Jacobian + lam*np.eye(numJoints)) @ np.transpose(Jacobian) @ dy # LM Algorithm
+    dx = dx.reshape(-1)
+    jointAngles_new = jointAngles + dx # all joint angle update
+    keypoints_new = get_joint_keypoints_from_angles(jointAngles_new, opt, camera_name = 'camera')
+    if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
+        jointAngles += dx
+        lam /= 10
+    else:
+        lam *= 10
+        # continue
 
     for j in range(numJoints):
         p.resetJointState(bodyUniqueId=kukaId,
@@ -388,7 +407,7 @@ for iter in range(iterations):
         obj_entity.get_transform().set_position(link_world_state[link_num][0])        
         obj_entity.get_transform().set_rotation(link_world_state[link_num][1]) 
     
-    keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
+    # keypoints = get_joint_keypoints_from_angles(jointAngles, opt, camera_name = 'camera')
     # print(f'iteration: {str(iter).zfill(5)}/{str(iterations).zfill(5)}')
 
 
@@ -408,9 +427,11 @@ for iter in range(iterations):
     save_keypoint_visualize_image(iter_image_path, target_image_path, keypoints.reshape(7,2), target_keypoints.reshape(7,2), iter)
     criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(jointAngles) )
     print('iter: {}, criteria: {}'.format(iter, criteria))
-    if criteria < 1e-1:
-        eps *= 0.9
-    if criteria < 1e-2:
+    # if criteria < 1e-1:
+    #     eps *= 0.9
+    if criteria < 1e-3:
+        print('targetJointAngles: ', np.array(targetJointAngles))
+        print('jointAngles: ', np.array(jointAngles))
         break
 
 # export_to_ndds_file(
@@ -422,7 +443,7 @@ for iter in range(iterations):
 # camera_struct = camera_struct_look_at,
 # )
 
-    
+# print("Elapsed time: ", time.time() - init_time)
 
 p.disconnect()
 nvisii.deinitialize()

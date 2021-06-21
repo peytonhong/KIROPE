@@ -238,7 +238,7 @@ class DigitalTwin():
 
         with open('./utils/dt_debug.csv', 'w') as  f: 
             writer = csv.writer(f, delimiter=',')
-            writer.writerow(['iter', 'criteria', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
+            writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
 
     def forward(self, target_keypoints, joint_angles_gt):       
@@ -251,16 +251,16 @@ class DigitalTwin():
         target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [14]
         
         # Joint PnP
-        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.jointAngles_jpnp)      
-        self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp(target_keypoints, self.jointAngles_jpnp)      
+        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.jointAngles_jpnp)
+        self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
         print('angle error: ', angle_error, retry, iter)
         # Kalman filter        
         self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
-        if angle_error < 5.:            
-            self.R = np.eye(self.numJoints)*0.00001
+        if angle_error < 5.:
+            self.R = np.eye(self.numJoints)*0.0001
         else:
             self.R = np.eye(self.numJoints)*1 # invalid measurement
-        
+
         # Update Kalman filter for self.jointAngles_main
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
         
@@ -345,14 +345,15 @@ class DigitalTwin():
         self.save_keypoint_visualize_image(iter_image_path, target_image_path, keypoints.reshape(7,2), target_keypoints.reshape(7,2), iter)
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
-
         jointAngles_init = jointAngles_jpnp.copy()        
 
-        for retry in range(10):
+        for retry in range(1):
             eps = np.linspace(1e-6, 1e-6, self.numJoints)
             if not retry == 0:
-                angle_noise = np.random.randn(self.numJoints)*0.001
-                jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+                angle_noise = np.random.randn(self.numJoints)*0.01
+                # jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+                jointAngles_jpnp = jointAngles_jpnp + angle_noise # reset jointAngles_jpnp with noise
+
             for iter in range(self.jpnp_max_iterations):
                 # get joint 2d keypoint from 3d points and camera model
                 keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
@@ -368,17 +369,17 @@ class DigitalTwin():
                 dy = np.array(target_keypoints - keypoints)
                 dx = np.linalg.pinv(Jacobian)@dy
                 jointAngles_jpnp += dx # all joint angle update
-                
-                criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
-                
+                jointAngles_jpnp = self.angle_wrapper(jointAngles_jpnp)
+                # criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
+                criteria = np.linalg.norm(dx)
                 if criteria < 1e-1:
                     eps *= 0.9
-                if criteria < 1e-2:
+                if criteria < 1e-3:
                     break
             
             angle_error = np.linalg.norm(jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)/self.numJoints
             
-            if angle_error < 1.:
+            if angle_error < 1.0:
                 break
             
         if self.save_images:
@@ -390,11 +391,14 @@ class DigitalTwin():
     def joint_pnp_with_LM(self, target_keypoints, jointAngles_jpnp):
 
         jointAngles_init = jointAngles_jpnp.copy()
-        eps = np.linspace(1e-5, 1e-5, self.numJoints)
-
+        eps = np.linspace(1e-6, 1e-6, self.numJoints)
+        
         for retry in range(10):
+            lam = 0.08
             if not retry == 0:
-                jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+                angle_noise = np.random.randn(self.numJoints)*0.01
+                # jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
+                jointAngles_jpnp = jointAngles_jpnp + angle_noise # reset jointAngles_jpnp with noise                
             for iter in range(self.jpnp_max_iterations):
                 # get joint 2d keypoint from 3d points and camera model
                 keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
@@ -409,15 +413,17 @@ class DigitalTwin():
                 # dy = np.array(target_keypoints - keypoints)
                 # dx = np.linalg.pinv(Jacobian)@dy
                 # self.jointAngles_jpnp += dx # all joint angle update
-                if iter == 0:
-                    lam = np.mean(np.diag(np.transpose(Jacobian)@Jacobian))*1e-3         # LM Algorithm
+                # if iter == 0:
+                #     lam = np.mean(np.diag(np.transpose(Jacobian)@Jacobian))*1e-3         # LM Algorithm
                 dy = np.array(keypoints - target_keypoints).reshape(-1,1)
                 dx = - np.linalg.inv(np.transpose(Jacobian)@Jacobian + lam*np.eye(self.numJoints)) @ np.transpose(Jacobian) @ dy # LM Algorithm
                 dx = dx.reshape(-1)
-                jointAngles_new = jointAngles_jpnp + dx # all joint angle update
+                jointAngles_new = jointAngles_jpnp + dx # all joint angle update                
                 keypoints_new = self.get_joint_keypoints_from_angles(jointAngles_new, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
+                
                 if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
                     jointAngles_jpnp += dx
+                    jointAngles_jpnp = self.angle_wrapper(jointAngles_jpnp)
                     lam /= 10
                 else:
                     lam *= 10
@@ -430,10 +436,9 @@ class DigitalTwin():
                     break
 
             angle_error = ((jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)**2).mean()
-            if angle_error < 1.:
+            if angle_error < 1.:             
                 break
-            else:
-                angle_noise = np.random.randn(self.numJoints)*0.01
+                
                 
 
         if self.save_images:
@@ -441,12 +446,16 @@ class DigitalTwin():
         
         return jointAngles_jpnp, angle_error, retry, iter
 
+    def angle_wrapper(self, angles):
+        # wrapping angles to have vales between [-pi, pi)
+        return np.arctan2(np.sin(angles), np.cos(angles))
+
     def save_debug_file(self, data):
-        iter, criteria, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
+        iter, angle_error, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
         with open('./utils/dt_debug.csv', 'a') as  f: 
             writer = csv.writer(f, delimiter=',')
             message = np.hstack((iter, 
-                                criteria, 
+                                angle_error, 
                                 np.array(joint_angles_gt).reshape(-1), 
                                 np.array(jointAngle_command).reshape(-1), 
                                 np.array(jointAngles_main).reshape(-1), 

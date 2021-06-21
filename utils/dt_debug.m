@@ -1,9 +1,9 @@
-close all; clear; clc;
+% close all; clear; clc;
 
 data = csvread('dt_debug.csv', 1, 0);
 
 iter = data(:,1);
-criteria = data(:,2);
+angle_error = data(:,2);
 angle_gt = data(:,3:9);
 angle_command = data(:,10:16);
 angle_control = data(:, 17:23);
@@ -19,21 +19,27 @@ for i=1:n-1
 end
 
 
-figure();
-subplot(2,1,1)
-plot(iter);
-grid on;
-subplot(2,1,2)
-plot(criteria);
-grid on
+% figure(1);
+% clf;
+% subplot(2,1,1)
+% plot(iter);
+% legend('iter');
+% grid on;
+% subplot(2,1,2)
+% plot(angle_error);
+% grid on
+% legend('angle error');
 
-figure();
+figure(2);
+clf;
 subplot(3,2,1)
 plot(angle_gt(:,1));
 grid on;
 hold on;
 plot(angle_command(:,1));
 plot(angle_pnp(:,1));
+title('joint 1')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')
 
 subplot(3,2,2)
@@ -42,6 +48,8 @@ grid on;
 hold on;
 plot(angle_command(:,2));
 plot(angle_pnp(:,2));
+title('joint 2')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')
 
 subplot(3,2,3)
@@ -50,6 +58,8 @@ grid on;
 hold on;
 plot(angle_command(:,3));
 plot(angle_pnp(:,3));
+title('joint 3')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')
 
 subplot(3,2,4)
@@ -58,6 +68,8 @@ grid on;
 hold on;
 plot(angle_command(:,4));
 plot(angle_pnp(:,4));
+title('joint 4')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')
 
 subplot(3,2,5)
@@ -66,6 +78,8 @@ grid on;
 hold on;
 plot(angle_command(:,5));
 plot(angle_pnp(:,5));
+title('joint 5')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')
 
 subplot(3,2,6)
@@ -74,4 +88,6 @@ grid on;
 hold on;
 plot(angle_command(:,6));
 plot(angle_pnp(:,6));
+title('joint 6')
+ylabel('angle [deg]')
 legend('gt', 'cmd', 'pnp')

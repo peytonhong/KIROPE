@@ -220,7 +220,7 @@ class DigitalTwin():
 
         # Kalman filter variables
         nj = self.numJoints
-        self.dT = self.frames_per_second
+        self.dT = 1/self.frames_per_second
         self.A = np.vstack( (np.hstack((np.eye(nj), np.eye(nj)*self.dT)), 
                             np.hstack((np.zeros((nj,nj)), np.eye(nj))))) # [2*numJoints, 2*numJoints]
         self.P = np.eye(2*nj)
@@ -251,9 +251,9 @@ class DigitalTwin():
         target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [14]
         
         # Joint PnP
-        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.jointAngles_jpnp)
+        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.X[:self.numJoints].reshape(-1))
         self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
-        print('angle error: ', angle_error, retry, iter)
+        
         # Kalman filter        
         self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
         if angle_error < 5.:
@@ -346,7 +346,8 @@ class DigitalTwin():
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
         jointAngles_init = jointAngles_jpnp.copy()        
-
+        criteria_buffer = []
+        jointAngles_buffer = []
         for retry in range(1):
             eps = np.linspace(1e-6, 1e-6, self.numJoints)
             if not retry == 0:
@@ -354,7 +355,7 @@ class DigitalTwin():
                 # jointAngles_jpnp = jointAngles_init + angle_noise # reset jointAngles_jpnp with noise
                 jointAngles_jpnp = jointAngles_jpnp + angle_noise # reset jointAngles_jpnp with noise
 
-            for iter in range(self.jpnp_max_iterations):
+            for iter in range(1000): #self.jpnp_max_iterations
                 # get joint 2d keypoint from 3d points and camera model
                 keypoints = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, camera_name = 'camera')
                             
@@ -369,16 +370,20 @@ class DigitalTwin():
                 dy = np.array(target_keypoints - keypoints)
                 dx = np.linalg.pinv(Jacobian)@dy
                 jointAngles_jpnp += dx # all joint angle update
+
                 jointAngles_jpnp = self.angle_wrapper(jointAngles_jpnp)
                 # criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
-                criteria = np.linalg.norm(dx)
-                if criteria < 1e-1:
-                    eps *= 0.9
-                if criteria < 1e-3:
+                criteria = np.linalg.norm(dy)
+                criteria_buffer.append(criteria)
+                jointAngles_buffer.append(jointAngles_jpnp)                
+                # if criteria < 1.:
+                #     eps *= 0.99
+                if criteria < 1e-2:
                     break
-            
+            jointAngles_jpnp = jointAngles_buffer[np.argmin(criteria_buffer)]
             angle_error = np.linalg.norm(jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)/self.numJoints
-            
+            print('angle_error: ', angle_error)
+            print('criteria_min, index: ', np.min(criteria_buffer), np.argmin(criteria_buffer))
             if angle_error < 1.0:
                 break
             
@@ -392,8 +397,7 @@ class DigitalTwin():
 
         jointAngles_init = jointAngles_jpnp.copy()
         eps = np.linspace(1e-6, 1e-6, self.numJoints)
-        
-        for retry in range(10):
+        for retry in range(1):
             lam = 0.08
             if not retry == 0:
                 angle_noise = np.random.randn(self.numJoints)*0.01
@@ -428,17 +432,16 @@ class DigitalTwin():
                 else:
                     lam *= 10
                     # continue
-                criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
-                
+                # criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
+                criteria = np.linalg.norm(dy)
                 # if criteria < 1e-1:
                 #     eps *= 0.9
-                if criteria < 1e-2:
+                if criteria < 1e-3:
                     break
-
             angle_error = ((jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)**2).mean()
             if angle_error < 1.:             
                 break
-                
+        
                 
 
         if self.save_images:

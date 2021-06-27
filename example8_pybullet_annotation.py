@@ -32,117 +32,117 @@ else:
 # # # # # # # # # # # # # # # # # # # # # # # # #
 
 
-def export_to_ndds_file(
-    filename = "tmp.json", #this has to include path as well
-    jointPositions = [], # this is a list of joint 3d positions to be exported into 2d keypoints
-    jointStates = [], # shape: [numJoints,2] each by (angle, velocity)
-    height = 500, 
-    width = 500,
-    camera_name = 'camera',
-    camera_struct = None,
-    ):
-    """
-    Method that exports the meta data like NDDS. This includes all the scene information in one 
-    scene. 
+# def export_to_ndds_file(
+#     filename = "tmp.json", #this has to include path as well
+#     jointPositions = [], # this is a list of joint 3d positions to be exported into 2d keypoints
+#     jointStates = [], # shape: [numJoints,2] each by (angle, velocity)
+#     height = 500, 
+#     width = 500,
+#     camera_name = 'camera',
+#     camera_struct = None,
+#     ):
+#     """
+#     Method that exports the meta data like NDDS. This includes all the scene information in one 
+#     scene. 
 
-    :filename: string for the json file you want to export, you have to include the extension
-    :obj_names: [string] each entry is a nvisii entity that has the cuboids attached to, these
-                are the objects that are going to be exported. 
-    :height: int height of the image size 
-    :width: int width of the image size 
-    :camera_name: string for the camera name nvisii entity
-    :camera_struct: dictionary of the camera look at information. Expecting the following 
-                    entries: 'at','eye','up'. All three has to be floating arrays of three entries.
-                    This is an optional export. 
-    :visibility_percentage: bool if you want to export the visibility percentage of the object. 
-                            Careful this can be costly on a scene with a lot of objects. 
-    :jointPositions: [numJoints, 3] 3d joint position of a robot
+#     :filename: string for the json file you want to export, you have to include the extension
+#     :obj_names: [string] each entry is a nvisii entity that has the cuboids attached to, these
+#                 are the objects that are going to be exported. 
+#     :height: int height of the image size 
+#     :width: int width of the image size 
+#     :camera_name: string for the camera name nvisii entity
+#     :camera_struct: dictionary of the camera look at information. Expecting the following 
+#                     entries: 'at','eye','up'. All three has to be floating arrays of three entries.
+#                     This is an optional export. 
+#     :visibility_percentage: bool if you want to export the visibility percentage of the object. 
+#                             Careful this can be costly on a scene with a lot of objects. 
+#     :jointPositions: [numJoints, 3] 3d joint position of a robot
 
-    :return nothing: 
-    """
+#     :return nothing: 
+#     """
 
-    # assume we only use the view camera
-    cam_matrix = nvisii.entity.get(camera_name).get_transform().get_world_to_local_matrix()
+#     # assume we only use the view camera
+#     cam_matrix = nvisii.entity.get(camera_name).get_transform().get_world_to_local_matrix()
     
-    cam_matrix_export = []
-    for row in cam_matrix:
-        cam_matrix_export.append([row[0],row[1],row[2],row[3]])
+#     cam_matrix_export = []
+#     for row in cam_matrix:
+#         cam_matrix_export.append([row[0],row[1],row[2],row[3]])
     
-    cam_world_location = nvisii.entity.get(camera_name).get_transform().get_position()
-    cam_world_quaternion = nvisii.entity.get(camera_name).get_transform().get_rotation()
-    # cam_world_quaternion = nvisii.quat_cast(cam_matrix)
+#     cam_world_location = nvisii.entity.get(camera_name).get_transform().get_position()
+#     cam_world_quaternion = nvisii.entity.get(camera_name).get_transform().get_rotation()
+#     # cam_world_quaternion = nvisii.quat_cast(cam_matrix)
 
-    cam_intrinsics = nvisii.entity.get(camera_name).get_camera().get_intrinsic_matrix(width, height)
+#     cam_intrinsics = nvisii.entity.get(camera_name).get_camera().get_intrinsic_matrix(width, height)
 
-    if camera_struct is None:
-        camera_struct = {
-            'at': [0,0,0,],
-            'eye': [0,0,0,],
-            'up': [0,0,0,]
-        }
+#     if camera_struct is None:
+#         camera_struct = {
+#             'at': [0,0,0,],
+#             'eye': [0,0,0,],
+#             'up': [0,0,0,]
+#         }
 
-    dict_out = {
-                "camera_data" : {
-                    "width" : width,
-                    'height' : height,
-                    'camera_look_at':
-                    {
-                        'at': [
-                            camera_struct['at'][0],
-                            camera_struct['at'][1],
-                            camera_struct['at'][2],
-                        ],
-                        'eye': [
-                            camera_struct['eye'][0],
-                            camera_struct['eye'][1],
-                            camera_struct['eye'][2],
-                        ],
-                        'up': [
-                            camera_struct['up'][0],
-                            camera_struct['up'][1],
-                            camera_struct['up'][2],
-                        ]
-                    },
-                    'camera_view_matrix':cam_matrix_export,
-                    'location_world':
-                    [
-                        cam_world_location[0],
-                        cam_world_location[1],
-                        cam_world_location[2],
-                    ],
-                    'quaternion_world_xyzw':[
-                        cam_world_quaternion[0],
-                        cam_world_quaternion[1],
-                        cam_world_quaternion[2],
-                        cam_world_quaternion[3],
-                    ],
-                    'intrinsics':{
-                        'fx':cam_intrinsics[0][0],
-                        'fy':cam_intrinsics[1][1],
-                        'cx':cam_intrinsics[2][0],
-                        'cy':cam_intrinsics[2][1]
-                    }
-                }, 
-                "objects" : []
-            }
+#     dict_out = {
+#                 "camera_data" : {
+#                     "width" : width,
+#                     'height' : height,
+#                     'camera_look_at':
+#                     {
+#                         'at': [
+#                             camera_struct['at'][0],
+#                             camera_struct['at'][1],
+#                             camera_struct['at'][2],
+#                         ],
+#                         'eye': [
+#                             camera_struct['eye'][0],
+#                             camera_struct['eye'][1],
+#                             camera_struct['eye'][2],
+#                         ],
+#                         'up': [
+#                             camera_struct['up'][0],
+#                             camera_struct['up'][1],
+#                             camera_struct['up'][2],
+#                         ]
+#                     },
+#                     'camera_view_matrix':cam_matrix_export,
+#                     'location_world':
+#                     [
+#                         cam_world_location[0],
+#                         cam_world_location[1],
+#                         cam_world_location[2],
+#                     ],
+#                     'quaternion_world_xyzw':[
+#                         cam_world_quaternion[0],
+#                         cam_world_quaternion[1],
+#                         cam_world_quaternion[2],
+#                         cam_world_quaternion[3],
+#                     ],
+#                     'intrinsics':{
+#                         'fx':cam_intrinsics[0][0],
+#                         'fy':cam_intrinsics[1][1],
+#                         'cx':cam_intrinsics[2][0],
+#                         'cy':cam_intrinsics[2][1]
+#                     }
+#                 }, 
+#                 "objects" : []
+#             }
 
-    projected_keypoints, _ = get_joint_keypoints(jointPositions, opt.width, opt.height, camera_name=camera_name)
+#     projected_keypoints, _ = get_joint_keypoints(jointPositions, opt.width, opt.height, camera_name=camera_name)
 
-    # put them in the image space. 
-    # for i_p, p in enumerate(projected_keypoints):
-    #     projected_keypoints[i_p] = [p[0]*width, p[1]*height]
-    # print('projected_keypoints: ', projected_keypoints)
+#     # put them in the image space. 
+#     # for i_p, p in enumerate(projected_keypoints):
+#     #     projected_keypoints[i_p] = [p[0]*width, p[1]*height]
+#     # print('projected_keypoints: ', projected_keypoints)
    
-    # Final export
-    dict_out['objects'].append({
-        'projected_keypoints': projected_keypoints,
-        'joint_angles': [jointStates[j][0] for j in range(len(jointStates))],
-        'joint_velocities': [jointStates[j][1] for j in range(len(jointStates))],
-        },
-        )
+#     # Final export
+#     dict_out['objects'].append({
+#         'projected_keypoints': projected_keypoints,
+#         'joint_angles': [jointStates[j][0] for j in range(len(jointStates))],
+#         'joint_velocities': [jointStates[j][1] for j in range(len(jointStates))],
+#         },
+#         )
         
-    with open(filename, 'w+') as fp:
-        json.dump(dict_out, fp, indent=4, sort_keys=True)
+#     with open(filename, 'w+') as fp:
+#         json.dump(dict_out, fp, indent=4, sort_keys=True)
 
 
 def get_my_keypoints(camera_entity, robotId, joint_world_position, opt):
@@ -187,9 +187,11 @@ planeUid = p.loadURDF("plane.urdf", [0, 0, -1])
 robotId = p.loadURDF("urdfs/ur3/ur3.urdf", [0, 0, 0], useFixedBase=True)
 p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], [0, 0, 0, 1])
 
-
-# plugin = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin")
-plugin = p.loadPlugin("eglRendererPlugin")
+if (egl):
+    plugin = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin")    
+else:
+    plugin = p.loadPlugin("eglRendererPlugin")
+    
 print("plugin=", plugin)
 p.configureDebugVisualizer(p.COV_ENABLE_RENDERING, 0)
 p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -291,20 +293,24 @@ for i in tqdm(range(int(opt.nb_frames))):
         # for j in range(numJoints+1):
         #     linkTexId = p.loadTexture(np.random.choice(noise_map_paths))
         #     p.changeVisualShape(robotId, j-1, textureUniqueId=linkTexId)
-    p.stepSimulation()
+        p.stepSimulation()
 
     img_arr = p.getCameraImage(opt.width,
                             opt.height,
                             viewMatrix=cam_extrinsic,
                             projectionMatrix=cam_intrinsic,
                             shadow=1,
-                            lightDirection=[5, 5, 5],
+                            lightDirection=[1, 1, 1],
                             renderer=p.ER_BULLET_HARDWARE_OPENGL, #p.ER_TINY_RENDERER, #p.ER_BULLET_HARDWARE_OPENGL
                             )
     img = np.array(img_arr[2]) # [height, width, 4]
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    print('img.shape',img.shape)
     cv2.imwrite(f'visualization_result/{str(i).zfill(5)}.png', img)
-    print('img_arr: ', img_arr)
+    depth = np.array(img_arr[3])*255
+    print('depth.shape',depth.shape)
+    cv2.imwrite(f'visualization_result/{str(i).zfill(5)}_depth.png', depth)
+    # print('img_arr: ', img_arr)
     print('unique:',np.unique(img))
     print('unique:',np.unique(img_arr[3]))
     print('unique:',np.unique(img_arr[4]))
@@ -336,4 +342,4 @@ for i in tqdm(range(int(opt.nb_frames))):
 p.unloadPlugin(plugin)
 p.disconnect()
 
-subprocess.call(['ffmpeg', '-y', '-framerate', '30', '-i', r"%05d.png",  '-vcodec', 'libx264', '-pix_fmt', 'yuv420p', '../output.mp4'], cwd=os.path.realpath(opt.outf))
+# subprocess.call(['ffmpeg', '-y', '-framerate', '30', '-i', r"%05d.png",  '-vcodec', 'libx264', '-pix_fmt', 'yuv420p', '../output.mp4'], cwd=os.path.realpath(opt.outf))

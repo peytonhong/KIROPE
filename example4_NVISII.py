@@ -16,8 +16,8 @@ opt.height = 500
 opt.noise = False
 opt.frame_freq = 8
 opt.nb_frames = 100 #300
-opt.outf = 'results'
-opt.random_color = True
+opt.outf = 'visualization_result'
+opt.random_color = False
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -45,9 +45,9 @@ camera = nvisii.entity.create(
     )
 )
 camera.get_transform().look_at(
-    at = (0,0,1),
+    at = (0,0,0.5),
     up = (0,0,1),
-    eye = (3,0,1),
+    eye = (2,0,0.5),
 )
 nvisii.set_camera_entity(camera)
 
@@ -80,8 +80,8 @@ sun.get_transform().set_position((10,10,5))
 sun.get_light().set_temperature(5780)
 sun.get_light().set_intensity(1000)
 
-gray_wall_color = nvisii.texture.create_from_file("gray_wall", "./content/photos_2020_5_11_fst_gray-wall-grunge.jpg")
-gradient_color = nvisii.texture.create_from_file("gradient", "./content/gradient.png")
+gray_wall_color = nvisii.texture.create_from_file("gray_wall", "../NVISII/examples/content/photos_2020_5_11_fst_gray-wall-grunge.jpg")
+gradient_color = nvisii.texture.create_from_file("gradient", "../NVISII/examples/content/gradient.png")
 
 floor = nvisii.entity.create(
     name="floor",
@@ -123,10 +123,10 @@ p.createMultiBody(
 # lets create a robot
 # p.setAdditionalSearchPath(pybullet_data.getDataPath())
 # p.loadURDF("plane.urdf", [0, 0, -0.3])
-kukaId = p.loadURDF("urdfs/kuka_iiwa/model.urdf", [0, 0, 0], useFixedBase=True)
-p.resetBasePositionAndOrientation(kukaId, [0, 0, 0.0], [0, 0, 0, 1])
+robotId = p.loadURDF("urdfs/ur3/ur3.urdf", [0, 0, 0], useFixedBase=True)
+p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], [0, 0, 0, 1])
 
-numJoints = p.getNumJoints(kukaId)
+numJoints = p.getNumJoints(robotId)
 
 p.setGravity(0, 0, -9.81)
 dt = 0.01
@@ -135,9 +135,19 @@ t = 0
 signs = [np.random.choice([-1, 1]) for _ in range(numJoints)]
 freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
 
-jointInfo = p.getJointInfo(kukaId, 0)
-lower_limit = [p.getJointInfo(kukaId, i)[8] for i in range(numJoints)]
-upper_limit = [p.getJointInfo(kukaId, i)[9] for i in range(numJoints)]
+jointInfo = p.getJointInfo(robotId, 0)
+lower_limit = [p.getJointInfo(robotId, i)[8] for i in range(numJoints)]
+upper_limit = [p.getJointInfo(robotId, i)[9] for i in range(numJoints)]
+
+def quaternion_multiply(quaternion1, quaternion0): #[x,y,z,w] order
+    x0, y0, z0, w0 = quaternion0
+    x1, y1, z1, w1 = quaternion1    
+    x = x1 * w0 - y1 * z0 + z1 * y0 + w1 * x0
+    y = x1 * z0 + y1 * w0 - z1 * x0 + w1 * y0
+    z = -x1 * y0 + y1 * x0 + z1 * w0 + w1 * z0
+    w = -x1 * x0 - y1 * y0 - z1 * z0 + w1 * w0
+    # norm = np.linalg.norm([x,y,z,w])
+    return np.array([x, y, z, w], dtype=np.float32)# / norm
 
 def clamping(min, val, max):
   # returns clamped value between min and max
@@ -152,7 +162,14 @@ def add_tuple(a, b):
     return tuple([sum(x) for x in zip(a, b)])
 
 # load robot link meshes from obj file
-obj_list = [f'urdfs/kuka_iiwa/meshes/link_{i}.obj' for i in range(numJoints+1)]
+obj_list = ['urdfs/ur3/visual/base.obj',
+            'urdfs/ur3/visual/shoulder.obj',
+            'urdfs/ur3/visual/upperarm.obj',
+            'urdfs/ur3/visual/forearm.obj',
+            'urdfs/ur3/visual/wrist1.obj',
+            'urdfs/ur3/visual/wrist2.obj',
+            'urdfs/ur3/visual/wrist3.obj',
+            ]
 link_meshes = [nvisii.mesh.create_from_file(f'mesh_{i}', obj_list[i]) for i in range(len(obj_list))]
 
 #   <material name="Grey">
@@ -166,16 +183,19 @@ link_meshes = [nvisii.mesh.create_from_file(f'mesh_{i}', obj_list[i]) for i in r
 link_colors = [[0.2, 0.2, 0.2], [0.5, 0.7, 1.0], [0.5, 0.7, 1.0], [1.0, 0.42, 0.04], [0.5, 0.7, 1.0], [0.5, 0.7, 1.0], [1.0, 0.42, 0.04], [0.2, 0.2, 0.2]]
 link_entities = []
 
-for link_num in range(len(link_meshes)):    
+for link_num in range(len(link_meshes)):
     if link_num==0: # base
-        link_state = p.getBasePositionAndOrientation(bodyUniqueId=kukaId)      
+        link_state = p.getBasePositionAndOrientation(bodyUniqueId=robotId)      
         pos_world = link_state[0]
-        rot_world = link_state[1]
+        # rot_world = link_state[1]
+        rot_world = quaternion_multiply(link_state[1], [0.707, 0., 0., 0.707])
     else: # link
-        link_state = p.getLinkState(bodyUniqueId=kukaId, linkIndex=link_num-1)        
-        pos_world = add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
-        rot_world = link_state[5] # world orientation of the URDF link frame
-
+        link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num-1)        
+        pos_world = add_tuple(link_state[4], (0, 0, 0.0)) # world position of the URDF link frame
+        # rot_world = link_state[5] # world orientation of the URDF link frame
+        rot_world = quaternion_multiply(link_state[5], [0.707, 0., 0., 0.707])
+        
+    
     link_entity = nvisii.entity.create(
         name=f"link_entity_{link_num}",
         mesh = link_meshes[link_num],
@@ -222,13 +242,12 @@ for link_num in range(len(link_meshes)):
                 obj_mat.set_roughness(random.uniform(0.9,1)) # default is 1 
         
     else: # original color
-        link_entity.get_material().set_base_color(link_colors[link_num])
+        # link_entity.get_material().set_base_color(link_colors[link_num])
         link_entity.get_material().set_roughness(0.1)   
         link_entity.get_material().set_specular(1)   
         link_entity.get_material().set_sheen(1)
 
     link_entities.append(link_entity)
-
 
 # # lets create a bunch of objects 
 # mesh = nvisii.mesh.create_teapotahedron('mesh')
@@ -342,10 +361,11 @@ for i in range (int(opt.nb_frames)):
 
         # robot joint pose setting
         t += dt
-        targetJointPoses = [clamping(lower_limit[k], signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
+        # targetJointPoses = [clamping(lower_limit[k], signs[k]*1.0*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
+        targetJointPoses = [np.sin(t), 0, 0, 0, 0, 0]
 
         for l in range(numJoints):
-            p.setJointMotorControl2(bodyIndex=kukaId,
+            p.setJointMotorControl2(bodyIndex=robotId,
                                     jointIndex=l,
                                     controlMode=p.POSITION_CONTROL,
                                     targetPosition=targetJointPoses[l],
@@ -359,19 +379,28 @@ for i in range (int(opt.nb_frames)):
     for link_num in range(len(link_meshes)):
         # get the pose of the objects
         if link_num==0: # base
-            link_state = p.getBasePositionAndOrientation(bodyUniqueId=kukaId)      
+            link_state = p.getBasePositionAndOrientation(bodyUniqueId=robotId)      
             pos_world = link_state[0]
             rot_world = link_state[1]
+            # rot_world = quaternion_multiply(link_state[1], [0.707, 0., 0., 0.707])
+            # rot_world = rot_shift(link_state[1])
+            # rot_world = [0.707, 0., 0., 0.707]
+                       
         else: # link
-            link_state = p.getLinkState(bodyUniqueId=kukaId, linkIndex=link_num-1)
-            pos_world = add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
-            rot_world = link_state[5] # world orientation of the URDF link frame
+            link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num-1)
+            pos_world = add_tuple(link_state[4], (0, 0, 0.0)) # world position of the URDF link frame
+            # rot_world = link_state[5] # world orientation of the URDF link frame
+            rot_world = link_state[1]
+            # rot_world = quaternion_multiply(link_state[1], [0.707, 0., 0., 0.707])
+            if link_num == 1:
+                print('link_state: ', link_state[1])
+                print('rot_world: ', rot_world) 
         
         # get the nvisii entity for that object
         obj_entity = link_entities[link_num]
         obj_entity.get_transform().set_position(pos_world)
         obj_entity.get_transform().set_rotation(rot_world) 
-
+    
     print(f'rendering frame {str(i).zfill(5)}/{str(opt.nb_frames).zfill(5)}')
 
     nvisii.render_to_file(

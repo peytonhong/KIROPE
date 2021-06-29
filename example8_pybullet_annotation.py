@@ -21,7 +21,7 @@ opt.outf = f'annotation/{opt.type}'
 opt.random_objects = False
 opt.nb_objs = 30
 
-
+ 
 
 # # # # # # # # # # # # # # # # # # # # # # # # #
 if os.path.isdir(opt.outf):

@@ -42,12 +42,14 @@ def make_annotation_file(
     camera_struct = [],
     cam_intrinsic = [],
     cam_extrinsic = [],
+    fov = [],
     ):
 
     dict_out = {
                 "camera_data" : {
                     'width' : width,
                     'height' : height,
+                    'fov' : fov,
                     'camera_look_at':
                     {
                         'at': [
@@ -83,18 +85,18 @@ def make_annotation_file(
 def get_my_keypoints(cam_K, cam_R, robotId, joint_world_position, opt):
     # get 2d keypoints from 3d positions using camera K, R matrix (2021.06.30, Hyosung Hong)    
     numJoints = p.getNumJoints(robotId)
-    jointPositions = np.zeros((numJoints, 4))
-    jointKeypoints = np.zeros((numJoints, 3))
+    jointPositions = np.zeros((numJoints, 3))
+    jointKeypoints = np.zeros((numJoints, 2))
     for l in range(numJoints):
         jointPosition = np.array(list(joint_world_position[l])+[1.]).reshape(4,1)
         jointKeypoint = cam_K@cam_R@jointPosition
         jointKeypoint /= jointKeypoint[-1]
         jointKeypoint[0] = opt.width - jointKeypoint[0]   # OpenGL convention for left-right mirroring
-        jointPositions[l] = jointPosition.reshape(-1)
-        jointKeypoints[l] = jointKeypoint.reshape(-1)
+        jointPositions[l] = jointPosition.reshape(-1)[:3]
+        jointKeypoints[l] = jointKeypoint.reshape(-1)[:2]
     # print('jointPositions: ', jointPositions)
     # print('jointKeypoints: ', jointKeypoints)
-    return jointKeypoints
+    return jointKeypoints # [numJoints, 2]
 
 def uniform(a, b): # for random object placement
         "Get a random number in the range [a, b) or [a, b] depending on rounding."
@@ -168,6 +170,7 @@ fy = opt.height/(2*np.tan(fov*np.pi/180/2))
 cam_K = np.array([[fx, 0, opt.height/2],[0, fy, opt.width/2], [0, 0, 1]])
 cam_R_1 = cam_R_1[:3]
 cam_R_2 = cam_R_2[:3]
+
 # Setup bullet physics stuff
 seconds_per_step = 1.0 / 240.0
 frames_per_second = 30.0
@@ -271,10 +274,9 @@ for i in tqdm(range(int(opt.nb_frames))):
     # get joint states
     joint_world_position = []
     for link_num in range(numJoints):    
-        link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)        
-        # pos_world = add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
+        link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)
         pos_world = list(link_state[4])
-        rot_world = link_state[5] # world orientation of the URDF link frame        
+        # rot_world = link_state[5] # world orientation of the URDF link frame        
         joint_world_position.append(pos_world)
         
     jointKeypoints_1 = get_my_keypoints(cam_K, cam_R_1, robotId=robotId, joint_world_position=joint_world_position, opt=opt)
@@ -300,6 +302,7 @@ for i in tqdm(range(int(opt.nb_frames))):
     camera_struct = camera_struct_look_at_1,
     cam_intrinsic = cam_K,
     cam_extrinsic = cam_R_1,
+    fov = fov,
     )
     make_annotation_file(
     filename = f"{opt.outf}/cam2/{str(i).zfill(5)}.json",
@@ -311,6 +314,7 @@ for i in tqdm(range(int(opt.nb_frames))):
     camera_struct = camera_struct_look_at_2,
     cam_intrinsic = cam_K,
     cam_extrinsic = cam_R_2,
+    fov = fov,
     )
     
 p.unloadPlugin(plugin)

@@ -159,7 +159,7 @@ target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_ke
 # print('target_keypoints: ', target_keypoints)
 jointAngles = np.zeros(numJoints)
 # eps = 1e-6 # epsilon for Jacobian approximation
-eps = np.linspace(1e-5, 1e-5, numJoints)
+eps = np.linspace(1e-6, 1e-6, numJoints)
 iterations = 100 # This value can be adjusted.
 for iter in range(iterations):    
     print(f'iter: {iter}, jointAngles: {jointAngles}')
@@ -167,7 +167,7 @@ for iter in range(iterations):
     keypoints1 = get_joint_keypoints_from_angles(jointAngles, opt, cam_K, cam_R1, robotId)
     keypoints2 = get_joint_keypoints_from_angles(jointAngles, opt, cam_K, cam_R2, robotId)
     keypoints = np.vstack((keypoints1, keypoints2)).reshape(-1) # [24]
-    # print('keypoints: ', keypoints)
+    
     # Jacobian approximation: keypoint rate (변화량)
     Jacobian = np.zeros((numJoints*2*2, numJoints)) # [24, 6]
     for col in range(numJoints):

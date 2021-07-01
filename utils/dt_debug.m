@@ -4,11 +4,11 @@ data = csvread('dt_debug.csv', 1, 0);
 
 iter = data(:,1);
 angle_error = data(:,2);
-angle_gt = data(:,3:9);
-angle_command = data(:,10:16);
-angle_control = data(:, 17:23);
-angle_pnp = data(:, 24:30);
-% jacobian = data(:, 31:end);
+angle_gt = data(:,3:8);
+angle_command = data(:,9:14);
+angle_control = data(:, 15:20);
+angle_pnp = data(:, 21:26);
+% jacobian = data(:, 27:end);
 % 
 % 
 % J = reshape(jacobian, n, 14, 7);
@@ -17,18 +17,18 @@ angle_diff = zeros(n-1,1);
 for i=1:n-1
     angle_diff(i) = norm(angle_gt(i+1)-angle_gt(i));
 end
+angle_command = angle_pnp;
 
-
-% figure(1);
-% clf;
-% subplot(2,1,1)
-% plot(iter);
-% legend('iter');
-% grid on;
-% subplot(2,1,2)
-% plot(angle_error);
-% grid on
-% legend('angle error');
+figure(1);
+clf;
+subplot(2,1,1)
+plot(iter);
+legend('iter');
+grid on;
+subplot(2,1,2)
+plot(angle_error);
+grid on
+legend('angle error');
 
 figure(2);
 clf;

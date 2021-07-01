@@ -58,16 +58,25 @@ def train(args, model, dataset, device, optimizer):
     # weights = np.array(weights)/np.sum(weights) # normalize
 
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
-        image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-        # state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
-        gt_belief_maps_noise = sampled_batch['belief_maps_noise'] # [N, 7, 500, 500]
-        pe = sampled_batch['positional_encoding'] # [N, 7, 256]
+        image_1 = sampled_batch['image_1'] # tensor [N, 3, 800, 800]
+        image_2 = sampled_batch['image_2'] # tensor [N, 3, 800, 800]
+        # state_embeddings = sampled_batch['state_embeddings'] # [N, 6, 100, 100]
+        gt_belief_maps_noise_1 = sampled_batch['belief_maps_noise_1'] # [N, 6, 500, 500]
+        gt_belief_maps_noise_2 = sampled_batch['belief_maps_noise_2'] # [N, 6, 500, 500]
+        pe = sampled_batch['positional_encoding'] # [N, 6, 256]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
-        # joint_states = sampled_batch['joint_states'] # [N, 7, 2]
-        projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
+        # joint_states = sampled_batch['joint_states'] # [N, 6, 2]
+        projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
+        projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
         # image_path = sampled_batch['image_path']
         # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
+        
+        # stacking cam1, cam2 data to look like batch size == 2, but originally batch size should be 1.
+        image = torch.vstack((image_1, image_2)) # [2N, 3, 800, 800]
+        gt_belief_maps_noise = torch.vstack((gt_belief_maps_noise_1, gt_belief_maps_noise_2))
+        pe = torch.vstack((pe, pe))
+        projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
         image, gt_belief_maps_noise = image.to(device), gt_belief_maps_noise.to(device)
         pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
@@ -76,8 +85,8 @@ def train(args, model, dataset, device, optimizer):
         # output = model(stacked_images) # ResNet model
         loss = F.mse_loss(output['pred_kps'], projected_keypoints)
         loss.backward()
-        train_loss_sum += loss.item()*len(sampled_batch)
-        num_trained_data += len(sampled_batch)
+        train_loss_sum += loss.item()*len(sampled_batch)*2
+        num_trained_data += len(sampled_batch)*2
         optimizer.step()
     
     train_loss_sum /= num_trained_data
@@ -93,35 +102,46 @@ def test(args, model, dataset, device, digital_twin):
     
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
-            image = sampled_batch['image'] # tensor [N, 3, 800, 800]
-            # state_embeddings = sampled_batch['state_embeddings'] # [N, 7, 100, 100]
-            gt_belief_maps = sampled_batch['belief_maps'] # [N, 7, 500, 500]
-            pe = sampled_batch['positional_encoding'] # [N, 7, 256]
+            image_1 = sampled_batch['image_1'] # tensor [N, 3, 800, 800]
+            image_2 = sampled_batch['image_2'] # tensor [N, 3, 800, 800]
+            # state_embeddings = sampled_batch['state_embeddings'] # [N, 6, 100, 100]
+            gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 500, 500]
+            gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 500, 500]            
+            pe = sampled_batch['positional_encoding'] # [N, 6, 256]
             joint_angles_gt = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
-            # joint_states = sampled_batch['joint_states'] # [N, 7, 2]        
-            projected_keypoints = sampled_batch['projected_keypoints'] # [N, 7, 2]
-            image_path = sampled_batch['image_path']
+            # joint_states = sampled_batch['joint_states'] # [N, 6, 2]        
+            projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
+            projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
+            image_path_1 = sampled_batch['image_path_1']
+            image_path_2 = sampled_batch['image_path_2']
             # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
+            
+            # stacking cam1, cam2 data to look like batch size == 2, but originally batch size should be 1.
+            image = torch.vstack((image_1, image_2)) # [2N, 3, 800, 800]
+            gt_belief_maps = torch.vstack((gt_belief_maps_1, gt_belief_maps_2))
+            pe = torch.vstack((pe, pe))
+            projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
 
             image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
             pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
             # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
-            output = model(image, gt_belief_maps, pe) # # [N, 7, 2(h,w)]
+            
+            output = model(image, gt_belief_maps, pe) # [2N, 6, 2(h,w)]
             # output = model(stacked_images)
             
             loss = F.mse_loss(output['pred_kps'], projected_keypoints)
             
-            test_loss_sum += loss.item()*len(sampled_batch)
-            num_tested_data += len(sampled_batch)
+            test_loss_sum += loss.item()*len(sampled_batch)*2
+            num_tested_data += len(sampled_batch)*2
             
             if args.digital_twin:
                 joint_angles_gt = [joint_angles_gt[i][0].item() for i in range(len(joint_angles_gt))]
                 # pred_keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h
-                pred_keypoints = digital_twin.forward(projected_keypoints[0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h GT value input for validation
-                visualize_result(image_path[0], pred_keypoints, projected_keypoints[0].cpu().numpy())
+                pred_keypoints = digital_twin.forward(projected_keypoints_1[0].cpu().numpy()[:, ::-1], projected_keypoints_2[0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h GT value input for validation
+                visualize_result(image_path_1[0], pred_keypoints, projected_keypoints_1[0].cpu().numpy())
             else:
-                visualize_result(image_path[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints[0].cpu().numpy())
+                visualize_result(image_path_1[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints_1[0].cpu().numpy())
             
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
@@ -231,8 +251,8 @@ def main(args):
     
     hidden_dim = 256 # fixed for state embiddings
     lr = 1e-4           # learning rate
-    # model_path = './checkpoints/model_best.pth.tar'
-    model_path = './checkpoints/attention_model/attention_normal.tar'
+    model_path = './checkpoints/model_best.pth.tar'
+    # model_path = "checkpoints/attention_model/attention_normal.tar"
 
     model = KIROPE_Attention(num_joints=7, hidden_dim=hidden_dim)
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
@@ -251,15 +271,14 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/train_many_obj', embed_dim=hidden_dim)
-    test_dataset = RobotDataset(data_dir='annotation/test_no_rand_obj', embed_dim=hidden_dim)
+    train_dataset = RobotDataset(data_dir='annotation/train', embed_dim=hidden_dim)
+    test_dataset = RobotDataset(data_dir='annotation/test', embed_dim=hidden_dim)
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    DT = DigitalTwin(urdf_path="urdfs/kuka_iiwa/model.urdf", 
-                    mesh_path="urdfs/kuka_iiwa/meshes",
-                    headless=True,
-                    save_images=False)
+    DT = DigitalTwin(urdf_path="urdfs/ur3/ur3.urdf", 
+                    dataset=test_dataset,
+                    )
 
     if args.command == 'train':
         # CHECKPOINT_DIR

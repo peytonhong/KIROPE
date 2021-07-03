@@ -16,7 +16,7 @@ opt.width = 500
 opt.height = 500 
 opt.noise = False
 opt.nb_frames = 1000
-opt.type = 'train'
+opt.type = 'temp'
 opt.outf = f'annotation/{opt.type}'
 opt.random_objects = False
 opt.nb_objs = 30
@@ -224,7 +224,7 @@ for i in tqdm(range(int(opt.nb_frames))):
         #     signs = [np.random.choice([-1, 1]) for _ in range(numJoints)]
         #     freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
         targetJointPoses = [clamping(lower_limit[k], 1.0*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
-
+        targetJointPoses[:3] = [0]*3
         for j in range(numJoints):
             p.setJointMotorControl2(bodyIndex=robotId,
                                     jointIndex=j,

@@ -35,7 +35,7 @@ while 1:
   for i in range(1):   
     t += dt
     targetJointPoses = [clamping(lower_limit[i], signs[i]*1.57*np.sin(freqs[i]*t), upper_limit[i]) for i in range(numJoints)]
-
+    # targetJointPoses[:4] = [0]*4
     for j in range(numJoints):
       p.setJointMotorControl2(bodyIndex=robotId,
                               jointIndex=j,

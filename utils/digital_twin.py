@@ -126,8 +126,8 @@ class DigitalTwin():
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2)
 
         # Joint PnP
-        # self.jointAngles_jpnp, angle_error, retry, iter = self.joint_pnp_with_LM(target_keypoints, self.X[:self.numJoints].reshape(-1))
-        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1), self.cam_K, self.cam_R_1, self.cam_R_2)
+        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1), self.cam_K, self.cam_R_1, self.cam_R_2)
+        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints), self.cam_K, self.cam_R_1, self.cam_R_2)
         
         # Kalman filter        
         self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
@@ -135,7 +135,7 @@ class DigitalTwin():
         #     self.R = np.eye(self.numJoints)*0.0001
         # else:
         #     self.R = np.eye(self.numJoints)*1 # invalid measurement
-        self.R = np.eye(self.numJoints)*100000
+        # self.R = np.eye(self.numJoints)*100000
         # Update Kalman filter for self.jointAngles_main
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
         
@@ -158,9 +158,9 @@ class DigitalTwin():
                                         jointIndex=j,
                                         controlMode=p.POSITION_CONTROL,
                                         targetPosition=self.jointAngles_main[j],             # 여기 main으로 바꿔놔야 함 (KF작동조건은main)
-                                        targetVelocity=self.jointVelocities_main[j],
+                                        # targetVelocity=self.jointVelocities_main[j],
                                         # targetPosition=joint_angles_gt[j],
-                                        # targetVelocity=0,
+                                        targetVelocity=0,
                                         force=1000,
                                         positionGain=0.1,
                                         velocityGain=0.1,
@@ -172,8 +172,9 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
-        keypoints = keypoints.reshape(-1,2)[:, ::-1] # [7, 2] (h, w)
+        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
+        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
+        keypoints = keypoints.reshape(-1,2)[:, ::-1] # [6, 2] (h, w)
         keypoints /= [self.opt.height, self.opt.width]
 
         self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])

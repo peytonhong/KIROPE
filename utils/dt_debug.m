@@ -4,10 +4,10 @@ data = csvread('dt_debug.csv', 1, 0);
 
 iter = data(:,1);
 angle_error = data(:,2);
-angle_gt = data(:,3:8);
-angle_command = data(:,9:14);
-angle_control = data(:, 15:20);
-angle_pnp = data(:, 21:26);
+angle_gt = data(:,3:8)*180/pi;
+angle_command = data(:,9:14)*180/pi;
+angle_control = data(:, 15:20)*180/pi;
+angle_pnp = data(:, 21:26)*180/pi;
 % jacobian = data(:, 27:end);
 % 
 % 

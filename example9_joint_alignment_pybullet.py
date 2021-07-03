@@ -21,7 +21,7 @@ opt.nb_frames = 10000
 opt.inputf1 = 'annotation/train/cam1'
 opt.inputf2 = 'annotation/train/cam2'
 opt.outf = 'joint_alignment'
-opt.idx = 999
+opt.idx = 680
 
 make_joint_sphere = False
 

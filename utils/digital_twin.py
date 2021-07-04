@@ -13,6 +13,7 @@ from tqdm import tqdm
 from glob import glob
 import cv2
 import csv
+from scipy.spatial.transform import Rotation as R
 
 class DigitalTwin():
 
@@ -339,7 +340,15 @@ class DigitalTwin():
         for link_num in range(len(jointAngles)):    
             link_state = p.getLinkState(bodyUniqueId=bodyUniqueId, linkIndex=link_num, physicsClientId=physicsClientId)
             pos_world = list(link_state[4])
-            # rot_world = link_state[5] # world orientation of the URDF link frame        
+            rot_world = link_state[5] # world orientation of the URDF link frame        
+            if link_num == 4:
+                rot_mat = R.from_quat(rot_world).as_matrix()
+                offset = np.array([0,-0.04,0.08535])
+                pos_world = rot_mat.dot(offset) + pos_world
+            if link_num == 5:
+                rot_mat = R.from_quat(rot_world).as_matrix()
+                offset = np.array([0.0,0.0619,0])
+                pos_world = rot_mat.dot(offset) + pos_world
             joint_world_position.append(pos_world)        
         keypoints = self.get_my_keypoints(cam_K, cam_R, bodyUniqueId=bodyUniqueId, physicsClientId=physicsClientId, joint_world_position=joint_world_position, opt=opt)
         return keypoints # [numJoints, 2]

@@ -9,7 +9,7 @@ import simplejson as json
 from tqdm import tqdm
 import cv2
 import glob
-
+from scipy.spatial.transform import Rotation as R
 
 opt = lambda : None
 opt.width = 500
@@ -224,7 +224,8 @@ for i in tqdm(range(int(opt.nb_frames))):
         #     signs = [np.random.choice([-1, 1]) for _ in range(numJoints)]
         #     freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
         targetJointPoses = [clamping(lower_limit[k], 1.0*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
-        targetJointPoses[:3] = [0]*3
+        # targetJointPoses[:3] = [0]*3
+        # targetJointPoses[-1] = 0
         for j in range(numJoints):
             p.setJointMotorControl2(bodyIndex=robotId,
                                     jointIndex=j,
@@ -276,7 +277,15 @@ for i in tqdm(range(int(opt.nb_frames))):
     for link_num in range(numJoints):    
         link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)
         pos_world = list(link_state[4])
-        # rot_world = link_state[5] # world orientation of the URDF link frame        
+        rot_world = link_state[5] # world orientation of the URDF link frame        
+        if link_num == 4:
+            rot_mat = R.from_quat(rot_world).as_matrix()
+            offset = np.array([0,-0.04,0.08535])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 5:
+            rot_mat = R.from_quat(rot_world).as_matrix()
+            offset = np.array([0.0,0.0619,0])
+            pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world)
         
     jointKeypoints_1 = get_my_keypoints(cam_K, cam_R_1, robotId=robotId, joint_world_position=joint_world_position, opt=opt)

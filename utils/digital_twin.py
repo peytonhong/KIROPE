@@ -109,7 +109,7 @@ class DigitalTwin():
 
         self.jpnp_max_iterations = 100
 
-        with open('./utils/dt_debug.csv', 'w') as  f: 
+        with open('./utils/dt_debug.csv', 'w', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
             writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
@@ -284,7 +284,7 @@ class DigitalTwin():
 
     def save_debug_file(self, data):
         iter, angle_error, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
-        with open('./utils/dt_debug.csv', 'a') as  f: 
+        with open('./utils/dt_debug.csv', 'a', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
             message = np.hstack((iter, 
                                 angle_error, 

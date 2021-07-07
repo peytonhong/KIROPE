@@ -9,7 +9,6 @@ import simplejson as json
 from tqdm import tqdm
 import cv2
 import glob
-from scipy.spatial.transform import Rotation as R
 
 opt = lambda : None
 opt.width = 500
@@ -279,11 +278,13 @@ for i in tqdm(range(int(opt.nb_frames))):
         pos_world = list(link_state[4])
         rot_world = link_state[5] # world orientation of the URDF link frame        
         if link_num == 4:
-            rot_mat = R.from_quat(rot_world).as_matrix()
+            rot_mat = p.getMatrixFromQuaternion (rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
             offset = np.array([0,-0.04,0.08535])
             pos_world = rot_mat.dot(offset) + pos_world
         if link_num == 5:
-            rot_mat = R.from_quat(rot_world).as_matrix()
+            rot_mat = p.getMatrixFromQuaternion (rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
             offset = np.array([0.0,0.0619,0])
             pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world)

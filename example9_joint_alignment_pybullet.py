@@ -85,12 +85,12 @@ def get_joint_keypoints_from_angles(jointAngles, opt, cam_K, cam_R, robotId):
         pos_world = list(link_state[4])
         rot_world = link_state[5] # world orientation of the URDF link frame
         if link_num == 4:
-            rot_mat = p.getMatrixFromQuaternion (rot_world)
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
             offset = np.array([0,-0.04,0.08535])
             pos_world = rot_mat.dot(offset) + pos_world
         if link_num == 5:
-            rot_mat = p.getMatrixFromQuaternion (rot_world)
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
             offset = np.array([0.0,0.0619,0])
             pos_world = rot_mat.dot(offset) + pos_world

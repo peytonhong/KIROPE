@@ -92,7 +92,7 @@ class DigitalTwin():
         self.jointVelocities_main = np.zeros(self.numJoints)
 
         # Kalman filter variables
-        nj = self.numJoints
+        nj = self.numJoints  # exclude end-effector
         self.dT = 1/self.frames_per_second
         self.A = np.vstack( (np.hstack((np.eye(nj), np.eye(nj)*self.dT)), 
                             np.hstack((np.zeros((nj,nj)), np.eye(nj))))) # [2*numJoints, 2*numJoints]
@@ -103,12 +103,12 @@ class DigitalTwin():
                             np.hstack((np.zeros((nj,nj)), Q_lower)))) # [2*numJoints, 2*numJoints]
         self.R = np.eye(nj)
         
-        self.X = np.hstack((self.jointAngles_main, self.jointVelocities_main)).reshape(-1,1) #[2*numJoints, 1]
+        self.X = np.zeros((2*nj, 1)) #[2*numJoints, 1]
         self.H = np.hstack((np.eye(nj), np.zeros((nj,nj)))) # [numJoints, 2*numJoints]
 
         self.jpnp_max_iterations = 100
 
-        with open('./utils/dt_debug.csv', 'w') as  f: 
+        with open('./utils/dt_debug.csv', 'w', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
             writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
@@ -126,9 +126,10 @@ class DigitalTwin():
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2)
 
         # Joint PnP
-        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1), self.cam_K, self.cam_R_1, self.cam_R_2)
-        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints), self.cam_K, self.cam_R_1, self.cam_R_2)
-        
+        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1), self.cam_K, self.cam_R_1, self.cam_R_2)
+        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints), self.cam_K, self.cam_R_1, self.cam_R_2)
+        self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
+
         # Kalman filter        
         self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
         # if angle_error < 5.:
@@ -153,14 +154,14 @@ class DigitalTwin():
         # PyBullet main simulation update
         steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame
         for _ in range(steps_per_frame):
-            for j in range(self.numJoints):
+            for j in range(self.numJoints - 1):
                 p.setJointMotorControl2(bodyIndex=self.robotId_main,
                                         jointIndex=j,
                                         controlMode=p.POSITION_CONTROL,
                                         targetPosition=self.jointAngles_main[j],             # 여기 main으로 바꿔놔야 함 (KF작동조건은main)
-                                        # targetVelocity=self.jointVelocities_main[j],
+                                        targetVelocity=self.jointVelocities_main[j],
                                         # targetPosition=joint_angles_gt[j],
-                                        targetVelocity=0,
+                                        # targetVelocity=0,
                                         force=1000,
                                         positionGain=0.1,
                                         velocityGain=0.1,
@@ -172,8 +173,8 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
-        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
+        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
+        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
         keypoints = keypoints.reshape(-1,2)[:, ::-1] # [6, 2] (h, w)
         keypoints /= [self.opt.height, self.opt.width]
 
@@ -282,7 +283,7 @@ class DigitalTwin():
 
     def save_debug_file(self, data):
         iter, angle_error, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
-        with open('./utils/dt_debug.csv', 'a') as  f: 
+        with open('./utils/dt_debug.csv', 'a', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
             message = np.hstack((iter, 
                                 angle_error, 

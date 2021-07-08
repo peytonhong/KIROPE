@@ -184,8 +184,8 @@ class DigitalTwin():
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp, cam_K, cam_R_1, cam_R_2):
         jointAngles_init = jointAngles_jpnp.copy()
-        
-        eps = np.linspace(1e-6, 1e-6, self.numJoints)
+        eps = 1e-6
+        # eps = np.linspace(1e-6, 1e-6, self.numJoints)
         iterations = 100 # This value can be adjusted.
         for iter in range(iterations): #self.jpnp_max_iterations
             # get joint 2d keypoint from 3d points and camera model
@@ -196,11 +196,11 @@ class DigitalTwin():
             Jacobian = np.zeros((self.numJoints*2*2, self.numJoints)) # [24, 6]
             for col in range(self.numJoints):
                 eps_array = np.zeros(self.numJoints)
-                eps_array[col] = eps[col]
+                eps_array[col] = eps
                 keypoints_eps_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_1)
                 keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_2)
                 keypoints_eps = np.vstack((keypoints_eps_1, keypoints_eps_2)).reshape(-1) # [24]
-                Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 4, axis=0)
+                Jacobian[:,col] = (keypoints_eps - keypoints)/eps
             
             dy = np.array(target_keypoints - keypoints)
             dx = np.linalg.pinv(Jacobian)@dy

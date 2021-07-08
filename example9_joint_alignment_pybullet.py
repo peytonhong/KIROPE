@@ -22,7 +22,7 @@ opt.nb_frames = 10000
 opt.inputf1 = 'annotation/train/cam1'
 opt.inputf2 = 'annotation/train/cam2'
 opt.outf = 'joint_alignment'
-opt.idx = 680
+opt.idx = 9
 
 make_joint_sphere = False
 
@@ -169,8 +169,8 @@ target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_ke
 
 # print('target_keypoints: ', target_keypoints)
 jointAngles = np.zeros(numJoints)
-# eps = 1e-6 # epsilon for Jacobian approximation
-eps = np.linspace(1e-6, 1e-6, numJoints)
+eps = 1e-6 # epsilon for Jacobian approximation
+# eps = np.linspace(1e-6, 1e-6, numJoints)
 iterations = 100 # This value can be adjusted.
 for iter in range(iterations):    
     print(f'iter: {iter}, jointAngles: {jointAngles}')
@@ -183,11 +183,11 @@ for iter in range(iterations):
     Jacobian = np.zeros((numJoints*2*2, numJoints)) # [24, 6]
     for col in range(numJoints):
         eps_array = np.zeros(numJoints)
-        eps_array[col] = eps[col]
+        eps_array[col] = eps
         keypoints_eps1 = get_joint_keypoints_from_angles(jointAngles+eps_array, opt, cam_K, cam_R1, robotId)
         keypoints_eps2 = get_joint_keypoints_from_angles(jointAngles+eps_array, opt, cam_K, cam_R2, robotId)
         keypoints_eps = np.vstack((keypoints_eps1, keypoints_eps2)).reshape(-1) # [24]
-        Jacobian[:,col] = (keypoints_eps - keypoints)/np.repeat(eps, 4, axis=0)
+        Jacobian[:,col] = (keypoints_eps - keypoints)/eps
         
     dy = np.array(target_keypoints - keypoints)
     dx = np.linalg.pinv(Jacobian)@dy

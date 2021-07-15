@@ -5,8 +5,8 @@ __pycache__/
 checkpoints/
 joint_alignment/
 visualization_result/
+noisemap/
 .vscode/
-*.png
 *.mp4
 *.zip
 

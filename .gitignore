@@ -9,4 +9,5 @@ noisemap/
 .vscode/
 *.mp4
 *.zip
-
+*.jpg
+*.png

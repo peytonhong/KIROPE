@@ -29,7 +29,7 @@ print(objp)
 axis = np.float32([[0.086,0,0], [0,0.086,0], [0,0,0.086]]).reshape(-1,3)
 
 # for i, fname in enumerate(glob.glob('experiment_data/samples/*.png')):
-fname = 'experiment_data/samples/00_Color.png'
+fname = 'experiment_data/samples/00_1_Color.png'
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 ret, corners = cv2.findChessboardCorners(gray, (cbcol,cbrow),None)

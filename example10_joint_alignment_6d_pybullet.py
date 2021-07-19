@@ -109,7 +109,6 @@ def get_joint_keypoints_from_angles_6d(params, opt, cam_K, robotId):
     R = Rz @ Ry @ Rx
     t = np.array([tx, ty, tz]).reshape(-1,1)
     cam_R = np.hstack((R, t))
-
     for j in range(len(jointAngles)):
         p.resetJointState(bodyUniqueId=robotId,
                         jointIndex=j,
@@ -247,6 +246,12 @@ for iter in range(iterations):
     # print(dx)
     jpnp_params += dx # all jpnp parameters update
 
+    jpnp_params[6] = clamping(-5, jpnp_params[6], 5)
+    jpnp_params[7] = clamping(-5, jpnp_params[7], 5)
+    jpnp_params[8] = clamping(-5, jpnp_params[8], 5)
+    jpnp_params[12] = clamping(-5, jpnp_params[12], 5)
+    jpnp_params[13] = clamping(-5, jpnp_params[13], 5)
+    jpnp_params[14] = clamping(-5, jpnp_params[14], 5)
 
     jpnp_params_1 = jpnp_params[:numJoints+6]
     jointAngles = jpnp_params_1[:numJoints]

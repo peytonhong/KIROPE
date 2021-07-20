@@ -14,15 +14,16 @@ def draw(img, keypoints, imgpts):
     img = cv2.line(img, keypoint, tuple(imgpts[2].ravel()), (255, 0, 0), 2)
     return img
 
-physicsClient = p.connect(p.GUI) # non-graphical version
-robotId = p.loadURDF("urdfs/ur3/ur3.urdf", [0, 0, 0], useFixedBase=True)
+physicsClient = p.connect(p.DIRECT) # non-graphical version
+robotId = p.loadURDF("urdfs/ur3/ur3_new.urdf", [0, 0, 0], useFixedBase=True)
 
 basePose = p.getQuaternionFromEuler([0,0,-90*np.pi/180])
 p.resetBasePositionAndOrientation(robotId, [0.2, 0, 0.0], basePose)
 numJoints = p.getNumJoints(robotId)
 
-# jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180
-jointAngles = np.float32([-90, 0, 0, -90, 0, 0])*np.pi/180
+# jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
+jointAngles = np.float32([90, -90, 90, -180, -90, 0])*np.pi/180   # No.2
+# jointAngles = np.float32([0, 0, 0, 0, 0, 0])*np.pi/180            # zero angle
 
 for j in range(numJoints):
     p.resetJointState(bodyUniqueId=robotId,
@@ -53,7 +54,6 @@ joint_world_position = np.array(joint_world_position)
 # print(joint_world_position)
 # k = input("Press anykey to continue.")
 
-
 # Load camera parameter using File storage in OpenCV
 cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_hong.yaml", cv2.FILE_STORAGE_READ)
 cam_K = cv_file.getNode("camera_matrix").mat()
@@ -70,14 +70,14 @@ cbcol = 5
 
 axis = np.float32([[0.088,0,0], [0,0.088,0], [0,0,0.088]]).reshape(-1,3)
 
-with open('experiment_data/samples/references/references_hong.json', 'r') as json_file:
+with open('experiment_data/samples/references/references_right.json', 'r') as json_file:
     load_data = json.load(json_file)
 
 ref_points = np.array(load_data['ref_points'])
 keypoints = np.array(load_data['keypoints'], dtype=np.float32)
 
 # for i, fname in enumerate(glob.glob('experiment_data/samples/*.png')):
-fname = 'experiment_data/samples/00_1_Color.png'
+fname = 'experiment_data/samples/01_2_Color.png'
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # ret, corners = cv2.findChessboardCorners(gray, (cbcol,cbrow),None)
@@ -99,7 +99,7 @@ robot_kps = robot_kps.reshape(-1,2)
 img = draw(img,keypoints,imgpts)
 for keypoint in robot_kps:
     cv2.circle(img, (int(keypoint[0]), int(keypoint[1])), radius=5, color=(0,255,0), thickness=2)
-cv2.imwrite(f'experiment_data/samples/align_result/pose_3.png', img)
+cv2.imwrite(f'experiment_data/samples/align_result/pose_01_2.png', img)
 # cv2.imshow('img',img)
 # k = cv2.waitKey(0) & 0xff
 

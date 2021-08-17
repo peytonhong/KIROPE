@@ -7,7 +7,7 @@ import pybullet as p
 
 # Function to draw the axis
 # Draw axis function can also be used.
-def draw(img, keypoints, imgpts):
+def draw_axis(img, keypoints, imgpts):
     keypoint = tuple(keypoints[0].ravel())
     img = cv2.line(img, keypoint, tuple(imgpts[0].ravel()), (0, 0, 255), 2)
     img = cv2.line(img, keypoint, tuple(imgpts[1].ravel()), (0, 255, 0), 2)
@@ -18,7 +18,7 @@ physicsClient = p.connect(p.DIRECT) # non-graphical version
 robotId = p.loadURDF("urdfs/ur3/ur3_new.urdf", [0, 0, 0], useFixedBase=True)
 
 basePose = p.getQuaternionFromEuler([0,0,-90*np.pi/180])
-p.resetBasePositionAndOrientation(robotId, [0.2, 0, 0.0], basePose)
+p.resetBasePositionAndOrientation(robotId, [0.2, 0, 0.0], basePose) # robot base offset(20cm) from checkerboard
 numJoints = p.getNumJoints(robotId)
 
 # jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
@@ -54,13 +54,8 @@ joint_world_position = np.array(joint_world_position)
 # print(joint_world_position)
 # k = input("Press anykey to continue.")
 
-# Load camera parameter using File storage in OpenCV
-cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_hong.yaml", cv2.FILE_STORAGE_READ)
-cam_K = cv_file.getNode("camera_matrix").mat()
-distortion = cv_file.getNode("dist_coeff").mat()
 
-
-criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+# criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
 cbrow = 3
 cbcol = 5
@@ -70,14 +65,14 @@ cbcol = 5
 
 axis = np.float32([[0.088,0,0], [0,0.088,0], [0,0,0.088]]).reshape(-1,3)
 
-with open('experiment_data/samples/references/references_right.json', 'r') as json_file:
+with open('/media/hyosung/DataDrive/KIROPE_dataset/20210812_201140/references/references_cam1.json', 'r') as json_file:
     load_data = json.load(json_file)
 
 ref_points = np.array(load_data['ref_points'])
 keypoints = np.array(load_data['keypoints'], dtype=np.float32)
 
 # for i, fname in enumerate(glob.glob('experiment_data/samples/*.png')):
-fname = 'experiment_data/samples/01_2_Color.png'
+fname = '/media/hyosung/DataDrive/KIROPE_dataset/20210812_201140/cam1/0000.png'
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # ret, corners = cv2.findChessboardCorners(gray, (cbcol,cbrow),None)
@@ -86,6 +81,12 @@ gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # print(keypoints)
 # Draw and display the keypoints
 img = cv2.drawChessboardCorners(img, (cbcol, cbrow), keypoints, True)
+
+# Load camera parameter using File storage in OpenCV
+cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_hong_640x480.yaml", cv2.FILE_STORAGE_READ)
+cam_K = cv_file.getNode("camera_matrix").mat()
+distortion = cv_file.getNode("dist_coeff").mat()
+
 # Find the rotation and translation vectors.
 _,rvecs, tvecs, inliers = cv2.solvePnPRansac(ref_points, keypoints, cam_K, distortion)
 print(rvecs)
@@ -96,10 +97,10 @@ imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, distortion)
 robot_joints = np.float32([[0.2, 0, 0], [0.2, 0, 0.1519]])
 robot_kps, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
 robot_kps = robot_kps.reshape(-1,2)
-img = draw(img,keypoints,imgpts)
+img = draw_axis(img,keypoints,imgpts)
 for keypoint in robot_kps:
     cv2.circle(img, (int(keypoint[0]), int(keypoint[1])), radius=5, color=(0,255,0), thickness=2)
-cv2.imwrite(f'experiment_data/samples/align_result/pose_01_2.png', img)
+cv2.imwrite(f'experiment_data/experiment_result/0000_cam1.png', img)
 # cv2.imshow('img',img)
 # k = cv2.waitKey(0) & 0xff
 

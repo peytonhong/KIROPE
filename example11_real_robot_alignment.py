@@ -7,8 +7,9 @@ import pybullet as p
 
 # Function to draw the axis
 # Draw axis function can also be used.
-def draw_axis(img, keypoints, imgpts):
+def draw_result(img, keypoints, imgpts):
     keypoint = tuple(keypoints[0].ravel())
+    print('keypoint: ', keypoint)
     img = cv2.line(img, keypoint, tuple(imgpts[0].ravel()), (0, 0, 255), 2)
     img = cv2.line(img, keypoint, tuple(imgpts[1].ravel()), (0, 255, 0), 2)
     img = cv2.line(img, keypoint, tuple(imgpts[2].ravel()), (255, 0, 0), 2)
@@ -22,8 +23,12 @@ p.resetBasePositionAndOrientation(robotId, [0.2, 0, 0.0], basePose) # robot base
 numJoints = p.getNumJoints(robotId)
 
 # jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
-jointAngles = np.float32([90, -90, 90, -180, -90, 0])*np.pi/180   # No.2
+# jointAngles = np.float32([90, -90, 90, -180, -90, 0])*np.pi/180   # No.2
 # jointAngles = np.float32([0, 0, 0, 0, 0, 0])*np.pi/180            # zero angle
+
+with open('annotation/dataset_experiment/20210812_201140/0000.json', 'r') as json_file:
+    load_data = json.load(json_file)
+jointAngles = load_data['joint_angles']
 
 for j in range(numJoints):
     p.resetJointState(bodyUniqueId=robotId,
@@ -65,14 +70,14 @@ cbcol = 5
 
 axis = np.float32([[0.088,0,0], [0,0.088,0], [0,0,0.088]]).reshape(-1,3)
 
-with open('/media/hyosung/DataDrive/KIROPE_dataset/20210812_201140/references/references_cam1.json', 'r') as json_file:
+with open('annotation/dataset_experiment/20210812_201140/references/references_cam1.json', 'r') as json_file:
     load_data = json.load(json_file)
 
 ref_points = np.array(load_data['ref_points'])
 keypoints = np.array(load_data['keypoints'], dtype=np.float32)
 
 # for i, fname in enumerate(glob.glob('experiment_data/samples/*.png')):
-fname = '/media/hyosung/DataDrive/KIROPE_dataset/20210812_201140/cam1/0000.png'
+fname = 'annotation/dataset_experiment/20210812_201140/cam1/0000.jpg'
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # ret, corners = cv2.findChessboardCorners(gray, (cbcol,cbrow),None)
@@ -94,10 +99,10 @@ print(tvecs)
 # project 3D points to image plane
 imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, distortion)
 # imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, np.zeros_like(distortion))
-robot_joints = np.float32([[0.2, 0, 0], [0.2, 0, 0.1519]])
+# robot_joints = np.float32([[0.2, 0, 0], [0.2, 0, 0.1519]])
 robot_kps, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
 robot_kps = robot_kps.reshape(-1,2)
-img = draw_axis(img,keypoints,imgpts)
+img = draw_result(img, keypoints.astype(np.uint8), imgpts.astype(np.uint8))
 for keypoint in robot_kps:
     cv2.circle(img, (int(keypoint[0]), int(keypoint[1])), radius=5, color=(0,255,0), thickness=2)
 cv2.imwrite(f'experiment_data/experiment_result/0000_cam1.png', img)

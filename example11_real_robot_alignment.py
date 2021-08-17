@@ -18,14 +18,14 @@ physicsClient = p.connect(p.GUI) # non-graphical version
 robotId = p.loadURDF("urdfs/ur3/ur3_new.urdf", [0, 0, 0], useFixedBase=True)
 
 basePose = p.getQuaternionFromEuler([0,0,-180*np.pi/180])
-p.resetBasePositionAndOrientation(robotId, [0.2, 0, 0.0], basePose) # robot base offset(20cm) from checkerboard
+p.resetBasePositionAndOrientation(robotId, [0.25, 0, 0.0], basePose) # robot base offset(25cm) from checkerboard
 numJoints = p.getNumJoints(robotId)
 
 # jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
 # jointAngles = np.float32([90, -90, 90, -180, -90, 0])*np.pi/180   # No.2
 # jointAngles = np.float32([0, 0, 0, 0, 0, 0])*np.pi/180            # zero angle
 
-with open('annotation/dataset_experiment/20210812_210147/0040.json', 'r') as json_file:
+with open('annotation/dataset_experiment/20210812_210147/0030.json', 'r') as json_file:
     load_data = json.load(json_file)
 jointAngles = load_data['joint_angles']
 
@@ -75,7 +75,7 @@ with open('annotation/dataset_experiment/20210812_210147/references/references_c
 ref_points = np.array(load_data['ref_points'])
 keypoints = np.array(load_data['keypoints'], dtype=np.float32)
 # for i, fname in enumerate(glob.glob('experiment_data/samples/*.png')):
-fname = 'annotation/dataset_experiment/20210812_210147/cam2/0040.jpg'
+fname = 'annotation/dataset_experiment/20210812_210147/cam2/0030.jpg'
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 # ret, corners = cv2.findChessboardCorners(gray, (cbcol,cbrow),None)

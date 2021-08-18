@@ -7,11 +7,11 @@ physicsClient = p.connect(p.GUI)
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeUid = p.loadURDF("plane.urdf", [0, 0, -0.1])
 robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
-p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], p.getQuaternionFromEuler([0,0,0]))
+p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], p.getQuaternionFromEuler([0,0,np.pi]))
 numJoints = p.getNumJoints(robotId)
 
 # targetJointPoses = [0, -1.57, 0, -1.57, 0, 0]
-targetJointPoses = [6.634353269507898e-05, -1.5707521351165825, -5.5360102004797795e-05, -1.5708962143338834, 1.7861635648763752e-05, -1.3169758231512674e-05]
+targetJointPoses = [-0.014069859181539357, -1.5705331007586878, -0.004110638295308888, -1.5707600752459925, 0.004471239633858204, -0.011967484151021779]
 
 while(1):
     for j in range(numJoints):

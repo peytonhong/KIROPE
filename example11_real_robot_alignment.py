@@ -5,7 +5,7 @@ import json
 import pybullet as p
 
 
-data_path = 'annotation/dataset_experiment/20210817_225703/'
+data_path = 'annotation/dataset_experiment/20210818_220706/'
 file_number = 100
 cam_type = 'cam1'
 
@@ -35,8 +35,8 @@ def draw_result(img, keypoints, imgpts):
 physicsClient = p.connect(p.DIRECT) # non-graphical version
 robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
 
-basePose = p.getQuaternionFromEuler([0,0,-180*np.pi/180])
-p.resetBasePositionAndOrientation(robotId, [0.25, 0, 0.0], basePose) # robot base offset(25cm) from checkerboard
+basePose = p.getQuaternionFromEuler([0,0,np.pi])
+p.resetBasePositionAndOrientation(robotId, [0.4, -0.15, 0.0], basePose) # robot base offset(25cm) from checkerboard
 numJoints = p.getNumJoints(robotId)
 
 # jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
@@ -70,12 +70,14 @@ for file_number in range(num_data):
         if link_num == 4:
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0,-0.04,0.08535])
+            # offset = np.array([0,-0.04,0.08535])
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
         if link_num == 5:
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0.0,0.0619,0])
+            # offset = np.array([0.0,0.0619,0])
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world) 
 
@@ -86,8 +88,8 @@ for file_number in range(num_data):
 
     # criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-    cbrow = 3
-    cbcol = 4
+    cbrow = 2
+    cbcol = 2
 
     # ref_points = np.zeros((cbrow * cbcol, 3), np.float32)
     # ref_points[:, :2] = np.mgrid[0:cbcol, 0:cbrow].T.reshape(-1, 2)*0.044
@@ -113,7 +115,7 @@ for file_number in range(num_data):
     # print(tvecs)
     # print(inliers)
     # project 3D points to image plane
-    axis = np.float32([[0.1,0,0], [0,0.1,0], [0,0,0.1]]).reshape(-1,3)
+    axis = np.float32([[0.825,0,0], [0,-0.825,0], [0,0,0.1]]).reshape(-1,3)
     imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, distortion)
     # imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, np.zeros_like(distortion))
     # robot_joints = np.float32([[0.2, 0, 0], [0.2, 0, 0.1519]])

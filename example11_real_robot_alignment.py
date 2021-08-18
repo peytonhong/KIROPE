@@ -33,7 +33,7 @@ def draw_result(img, keypoints, imgpts):
 
 
 physicsClient = p.connect(p.DIRECT) # non-graphical version
-robotId = p.loadURDF("urdfs/ur3/ur3_new.urdf", [0, 0, 0], useFixedBase=True)
+robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
 
 basePose = p.getQuaternionFromEuler([0,0,-180*np.pi/180])
 p.resetBasePositionAndOrientation(robotId, [0.25, 0, 0.0], basePose) # robot base offset(25cm) from checkerboard

@@ -67,16 +67,34 @@ for file_number in range(num_data):
         link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)
         pos_world = list(link_state[4])
         rot_world = link_state[5] # world orientation of the URDF link frame
-        if link_num == 4:
+        if link_num == 0: # sholder
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            # offset = np.array([0,-0.04,0.08535])
             offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
-        if link_num == 5:
+        if link_num == 1: # upper_arm
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            # offset = np.array([0.0,0.0619,0])
+            offset = np.array([0,0,0.1198])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 2: # fore_arm
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,0.025])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 3: # wrist 1
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,-0.085])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 4: # wrist 2
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,-0.045,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 5: # wrist 3
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
             offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world) 

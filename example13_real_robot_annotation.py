@@ -5,7 +5,7 @@ import json
 import pybullet as p
 from tqdm import tqdm
 
-data_path = 'annotation/dataset_experiment/20210818_235039/'
+data_path = 'annotation/dataset_experiment/20210819_025345/'
 cam_type = 'cam2'
 print(data_path + cam_type)
 

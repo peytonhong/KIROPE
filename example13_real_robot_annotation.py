@@ -3,11 +3,11 @@ import cv2
 from glob import glob
 import json
 import pybullet as p
+from tqdm import tqdm
 
-
-data_path = 'annotation/dataset_experiment/20210818_220706/'
-file_number = 100
-cam_type = 'cam1'
+data_path = 'annotation/dataset_experiment/20210818_235039/'
+cam_type = 'cam2'
+print(data_path + cam_type)
 
 def get_json_path(data_path, file_number):
     json_path = data_path + str(file_number).zfill(4) + '.json'
@@ -18,19 +18,47 @@ def get_reference_path(data_path, file_number, cam_type):
 def get_image_path(data_path, file_number, cam_type):    
     image_path = data_path + cam_type + '/' + str(file_number).zfill(4) + '.jpg'
     return image_path
+def get_annotation_path(data_path, file_nmber, cam_type):
+    anntation_path = data_path + cam_type + '/' + str(file_number).zfill(4) + '.json'
+    return anntation_path
 
-num_data = len(glob(data_path+cam_type+'/*'))
+def make_annotation_file(
+    filename = "tmp.json", #this has to include path as well    
+    joint_angles = [], # shape: [numJoints,]
+    joint_keypoints = [], # 2D keypoints
+    width = 640,
+    height = 480,
+    camera_intrinsic = [],
+    camera_extrinsic = [],
+    camera_distortion = [],
+    ):
+
+    dict_out = {
+                "camera" : {
+                    'width' : width,
+                    'height' : height,                    
+                    'camera_intrinsic': camera_intrinsic.tolist(),
+                    'camera_extrinsic': camera_extrinsic.tolist(),
+                    'camera_distortion': camera_distortion.tolist(),
+                }, 
+                "object" : {
+                    'joint_keypoints': joint_keypoints.tolist(),
+                    'joint_angles': joint_angles,
+                }
+            }
+    
+    with open(filename, 'w') as fp:
+        json.dump(dict_out, fp, indent=4, sort_keys=False)
+
 
 # Function to draw the axis
 # Draw axis function can also be used.
-def draw_result(img, keypoints, imgpts):
+def draw_axis(img, keypoints, imgpts):
     keypoint = tuple(keypoints[0].ravel())
     img = cv2.line(img, keypoint, tuple(imgpts[0].ravel()), (0, 0, 255), 2)
     img = cv2.line(img, keypoint, tuple(imgpts[1].ravel()), (0, 255, 0), 2)
     img = cv2.line(img, keypoint, tuple(imgpts[2].ravel()), (255, 0, 0), 2)
     return img
-
-
 
 physicsClient = p.connect(p.DIRECT) # non-graphical version
 robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
@@ -42,8 +70,9 @@ numJoints = p.getNumJoints(robotId)
 # jointAngles = np.float32([0, -90, 0, -90, 0, 0])*np.pi/180          # No.1: Home position
 # jointAngles = np.float32([90, -90, 90, -180, -90, 0])*np.pi/180   # No.2
 # jointAngles = np.float32([0, 0, 0, 0, 0, 0])*np.pi/180            # zero angle
-
-for file_number in range(num_data):
+num_data = len(glob(data_path+cam_type+'/*.jpg'))
+# num_data = 1
+for file_number in tqdm(range(num_data)):
     with open(get_reference_path(data_path, file_number, cam_type), 'r') as json_file:
         load_data = json.load(json_file)
 
@@ -133,16 +162,30 @@ for file_number in range(num_data):
     # print(tvecs)
     # print(inliers)
     # project 3D points to image plane
-    axis = np.float32([[0.825,0,0], [0,-0.825,0], [0,0,0.1]]).reshape(-1,3)
+    axis = np.float32([[0.1, 0, 0], [0, 0.1, 0], [0, 0, 0.1]]).reshape(-1,3)
     imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, distortion)
     # imgpts, jacobian = cv2.projectPoints(axis, rvecs, tvecs, cam_K, np.zeros_like(distortion))
     # robot_joints = np.float32([[0.2, 0, 0], [0.2, 0, 0.1519]])
     robot_kps, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
     robot_kps = robot_kps.reshape(-1,2)
-    img = draw_result(img, keypoints.astype(np.int32), imgpts.astype(np.int32))
+    img = draw_axis(img, keypoints.astype(np.int32), imgpts.astype(np.int32))
     for keypoint in robot_kps:
         cv2.circle(img, (int(keypoint[0]), int(keypoint[1])), radius=5, color=(0,255,0), thickness=2)
-    cv2.imwrite(f'experiment_data/experiment_result/{str(file_number).zfill(4)}.jpg', img)
+    cv2.imwrite(f'experiment_data/experiment_result/{str(file_number).zfill(4)}.jpg', img) # for verification
+
+    rotation_matrix = cv2.Rodrigues(rvecs)[0]
+    camera_extrinsic = np.hstack((rotation_matrix, tvecs))
+    
+    make_annotation_file(
+        filename=get_annotation_path(data_path, file_number, cam_type),
+        joint_angles=jointAngles,
+        joint_keypoints=robot_kps,
+        width=img.shape[1],
+        height=img.shape[0],
+        camera_intrinsic=cam_K,
+        camera_extrinsic=camera_extrinsic,
+        camera_distortion=distortion,
+    )
 # cv2.imshow('img',img)
 # k = cv2.waitKey(0) & 0xff
 

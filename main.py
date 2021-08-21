@@ -58,32 +58,33 @@ def train(args, model, dataset, device, optimizer):
     # weights = np.array(weights)/np.sum(weights) # normalize
 
     for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Training with batch size ({args.batch_size})")):
-        image_1 = sampled_batch['image_1'] # tensor [N, 3, 800, 800]
-        image_2 = sampled_batch['image_2'] # tensor [N, 3, 800, 800]
+        image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
+        image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
         # state_embeddings = sampled_batch['state_embeddings'] # [N, 6, 100, 100]
-        gt_belief_maps_noise_1 = sampled_batch['belief_maps_noise_1'] # [N, 6, 500, 500]
-        gt_belief_maps_noise_2 = sampled_batch['belief_maps_noise_2'] # [N, 6, 500, 500]
-        pe = sampled_batch['positional_encoding'] # [N, 6, 256]
+        gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
+        gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
+        # pe = sampled_batch['positional_encoding'] # [N, 6, 256]
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
         # joint_states = sampled_batch['joint_states'] # [N, 6, 2]
-        projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
-        projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
+        # projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
+        # projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
         # image_path = sampled_batch['image_path']
-        # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
+        # stacked_images = sampled_batch['stacked_images'] # [N, 9, 480, 640]
         
         # stacking cam1, cam2 data to look like batch size == 2, but originally batch size should be 1.
-        image = torch.vstack((image_1, image_2)) # [2N, 3, 800, 800]
-        gt_belief_maps_noise = torch.vstack((gt_belief_maps_noise_1, gt_belief_maps_noise_2))
-        pe = torch.vstack((pe, pe))
-        projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
-        image, gt_belief_maps_noise = image.to(device), gt_belief_maps_noise.to(device)
-        pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
+        image = torch.vstack((image_1, image_2)) # [2N, 3, 480, 640]
+        gt_belief_maps = torch.vstack((gt_belief_maps_1, gt_belief_maps_2))
+        # pe = torch.vstack((pe, pe))
+        # projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
+        image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
+        # pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
+        # projected_keypoints = projected_keypoints.to(device)
         # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
-        output = model(image, gt_belief_maps_noise, pe) # Transformer style model
-        # output = model(stacked_images) # ResNet model
-        loss = F.mse_loss(output['pred_kps'], projected_keypoints)
+        # output = model(image, gt_belief_maps, pe) # Transformer style model
+        output = model(image) # ResNet model
+        loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         loss.backward()
         train_loss_sum += loss.item()*len(sampled_batch)*2
         num_trained_data += len(sampled_batch)*2
@@ -254,9 +255,9 @@ def main(args):
     model_path = './checkpoints/model_best.pth.tar'
     # model_path = "checkpoints/attention_model/attention_normal.tar"
 
-    model = KIROPE_Attention(num_joints=7, hidden_dim=hidden_dim)
+    # model = KIROPE_Attention(num_joints=6, hidden_dim=hidden_dim)
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
-    # model = ResnetSimple()
+    model = ResnetSimple(num_joints=6)
 
     if torch.cuda.is_available(): # for multi gpu compatibility
         device = 'cuda'        
@@ -271,12 +272,12 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/train', embed_dim=hidden_dim)
-    test_dataset = RobotDataset(data_dir='annotation/test', embed_dim=hidden_dim)
+    train_dataset = RobotDataset(data_dir='annotation/real/train', embed_dim=hidden_dim)
+    test_dataset = RobotDataset(data_dir='annotation/real/validation', embed_dim=hidden_dim)
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    DT = DigitalTwin(urdf_path="urdfs/ur3/ur3.urdf", 
+    DT = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf", 
                     dataset=test_dataset,
                     )
 

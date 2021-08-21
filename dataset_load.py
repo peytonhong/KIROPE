@@ -12,20 +12,20 @@ from utils.gaussian_position_encoding import gaussian_state_embedding, positiona
 class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
 
-    def __init__(self, data_dir='annotation/train', embed_dim=256):        
-        self.image_paths_1 = sorted(glob(os.path.join(data_dir, 'cam1/*.png')))
-        self.label_paths_1 = sorted(glob(os.path.join(data_dir, 'cam1/*.json')))
-        self.image_paths_2 = sorted(glob(os.path.join(data_dir, 'cam2/*.png')))
-        self.label_paths_2 = sorted(glob(os.path.join(data_dir, 'cam2/*.json')))
+    def __init__(self, data_dir='annotation/real/train'):#, embed_dim=256):
+        self.image_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.jpg')))
+        self.label_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.json')))
+        self.image_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.jpg')))
+        self.label_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.json')))
         # standard PyTorch mean-std input image normalization
         self.image_transform = T.Compose([
-            T.Resize(800),
+            # T.Resize(800),
             T.ToTensor(),
             T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
-        self.image_resize_800 = T.Resize(800)
-        self.image_resize_16 = T.Resize(16)
-        self.embed_dim = embed_dim
+        # self.image_resize_800 = T.Resize(800)
+        # self.image_resize_16 = T.Resize(16)
+        # self.embed_dim = embed_dim
         # Camera parameters
         with open(self.label_paths_1[0]) as json_file:
             label_1 = json.load(json_file)
@@ -63,22 +63,22 @@ class RobotDataset(Dataset):
         with open(self.label_paths_2[idx]) as json_file:
             label_2 = json.load(json_file)
         joint_angles = label_1['objects']['joint_angles']
-        joint_velocities = label_1['objects']['joint_velocities']
-        joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
-        joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
+        # joint_velocities = label_1['objects']['joint_velocities']
+        # joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
+        # joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
         projected_keypoints_wh_1 = label_1['objects']['projected_keypoints'] #[6, 2(w,h)]
         projected_keypoints_wh_2 = label_2['objects']['projected_keypoints'] #[6, 2(w,h)]
-        numJoints = len(projected_keypoints_wh_1)
+        # numJoints = len(projected_keypoints_wh_1)
 
         belief_maps_1 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]        
-        belief_maps_1 = self.resize_belief_map(belief_maps_1, self.image_resize_16)
-        belief_maps_noise_1 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_1, noise_std=5)).type(torch.FloatTensor) # [6, h,w]        
-        belief_maps_noise_1 = self.resize_belief_map(belief_maps_noise_1, self.image_resize_16)
+        # belief_maps_1 = self.resize_belief_map(belief_maps_1, self.image_resize_16)
+        # belief_maps_noise_1 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_1, noise_std=5)).type(torch.FloatTensor) # [6, h,w]        
+        # belief_maps_noise_1 = self.resize_belief_map(belief_maps_noise_1, self.image_resize_16)
 
         belief_maps_2 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]        
-        belief_maps_2 = self.resize_belief_map(belief_maps_2, self.image_resize_16)
-        belief_maps_noise_2 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_2, noise_std=5)).type(torch.FloatTensor) # [6, h,w]        
-        belief_maps_noise_2 = self.resize_belief_map(belief_maps_noise_2, self.image_resize_16)
+        # belief_maps_2 = self.resize_belief_map(belief_maps_2, self.image_resize_16)
+        # belief_maps_noise_2 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_2, noise_std=5)).type(torch.FloatTensor) # [6, h,w]        
+        # belief_maps_noise_2 = self.resize_belief_map(belief_maps_noise_2, self.image_resize_16)
         
         # state_embeddings = torch.tensor(gaussian_state_embedding(joint_states, self.embed_dim)).type(torch.FloatTensor) # [6, num_features]
         # _, num_features = state_embeddings.shape
@@ -87,27 +87,27 @@ class RobotDataset(Dataset):
         # image_1 = self.image_resize_800(image_1) # [3, 800, 800]
         # image_2 = self.image_resize_800(image_2) # [3, 800, 800]
         # stacked_images = torch.cat((image_1, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
-        pe = positional_encoding(256, numJoints) # [6, 256]
-        projected_keypoints_hw_norm_1 = torch.tensor(np.array(projected_keypoints_wh_1)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
-        projected_keypoints_hw_norm_2 = torch.tensor(np.array(projected_keypoints_wh_2)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
+        # pe = positional_encoding(256, numJoints) # [6, 256]
+        # projected_keypoints_hw_norm_1 = torch.tensor(np.array(projected_keypoints_wh_1)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
+        # projected_keypoints_hw_norm_2 = torch.tensor(np.array(projected_keypoints_wh_2)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
 
         sample = {
             'image_1': image_1, 
             'image_2': image_2, 
             'joint_angles': joint_angles, 
-            'joint_velocities': joint_velocities, 
-            'joint_states': joint_states, 
-            'belief_maps_1': belief_maps_1,  # [6, 16, 16]
-            'belief_maps_noise_1': belief_maps_noise_1, # [6, 16, 16]
-            'belief_maps_2': belief_maps_2,  # [6, 16, 16]
-            'belief_maps_noise_2': belief_maps_noise_2, # [6, 16, 16]
-            'projected_keypoints_1': projected_keypoints_hw_norm_1,  # [6, 2(h,w)]
-            'projected_keypoints_2': projected_keypoints_hw_norm_2,  # [6, 2(h,w)]
+            # 'joint_velocities': joint_velocities, 
+            # 'joint_states': joint_states, 
+            'belief_maps_1': belief_maps_1,  # [6, 480, 640]
+            # 'belief_maps_noise_1': belief_maps_noise_1, # [6, 480, 640]
+            'belief_maps_2': belief_maps_2,  # [6, 480, 640]
+            # 'belief_maps_noise_2': belief_maps_noise_2, # [6, 480, 640]
+            # 'projected_keypoints_1': projected_keypoints_hw_norm_1,  # [6, 2(h,w)]
+            # 'projected_keypoints_2': projected_keypoints_hw_norm_2,  # [6, 2(h,w)]
             # 'state_embeddings': state_embeddings.flatten(1),
             'image_path_1': image_path_1,
             'image_path_2': image_path_2,
             # 'stacked_images': stacked_images,
-            'positional_encoding': pe,
+            # 'positional_encoding': pe,
             }
         return sample
 

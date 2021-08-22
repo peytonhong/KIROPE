@@ -67,16 +67,17 @@ def train(args, model, dataset, device, optimizer):
         # joint_angles = sampled_batch['joint_angles'] 
         # joint_velocities = sampled_batch['joint_velocities']
         # joint_states = sampled_batch['joint_states'] # [N, 6, 2]
-        # projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
-        # projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
+        # keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
+        # keypoints_GT_2 = sampled_batch['keypoints_GT_2'] # [N, 6, 2]
         # image_path = sampled_batch['image_path']
-        # stacked_images = sampled_batch['stacked_images'] # [N, 9, 480, 640]
+        stacked_image_1 = sampled_batch['stacked_image_1'] # [N, 9, 480, 640]
+        stacked_image_2 = sampled_batch['stacked_image_2'] # [N, 9, 480, 640]
         
         # stacking cam1, cam2 data to look like batch size == 2, but originally batch size should be 1.
-        image = torch.vstack((image_1, image_2)) # [2N, 3, 480, 640]
-        gt_belief_maps = torch.vstack((gt_belief_maps_1, gt_belief_maps_2))
+        image = torch.vstack((stacked_image_1, stacked_image_2)) # [2N, 9, 480, 640]
+        gt_belief_maps = torch.vstack((gt_belief_maps_1, gt_belief_maps_2)) # [N, 6, 480, 640]
         # pe = torch.vstack((pe, pe))
-        # projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
+        # projected_keypoints = torch.vstack((keypoints_GT_1, keypoints_GT_2))
         image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
         # pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
         # projected_keypoints = projected_keypoints.to(device)
@@ -86,9 +87,10 @@ def train(args, model, dataset, device, optimizer):
         output = model(image) # ResNet model
         loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
         loss.backward()
-        train_loss_sum += loss.item()*len(sampled_batch)*2
-        num_trained_data += len(sampled_batch)*2
+        train_loss_sum += loss.item()*args.batch_size*2
+        num_trained_data += args.batch_size*2
         optimizer.step()
+        break
     
     train_loss_sum /= num_trained_data
 
@@ -103,47 +105,63 @@ def test(args, model, dataset, device, digital_twin):
     
     with torch.no_grad():
         for _, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
-            image_1 = sampled_batch['image_1'] # tensor [N, 3, 800, 800]
-            image_2 = sampled_batch['image_2'] # tensor [N, 3, 800, 800]
+            image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
+            image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
             # state_embeddings = sampled_batch['state_embeddings'] # [N, 6, 100, 100]
-            gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 500, 500]
-            gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 500, 500]            
-            pe = sampled_batch['positional_encoding'] # [N, 6, 256]
+            gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
+            gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
+            # pe = sampled_batch['positional_encoding'] # [N, 6, 256]
             joint_angles_gt = sampled_batch['joint_angles'] 
             # joint_velocities = sampled_batch['joint_velocities']
             # joint_states = sampled_batch['joint_states'] # [N, 6, 2]        
-            projected_keypoints_1 = sampled_batch['projected_keypoints_1'] # [N, 6, 2]
-            projected_keypoints_2 = sampled_batch['projected_keypoints_2'] # [N, 6, 2]
+            keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
+            keypoints_GT_2 = sampled_batch['keypoints_GT_2'] # [N, 6, 2]
             image_path_1 = sampled_batch['image_path_1']
             image_path_2 = sampled_batch['image_path_2']
-            # stacked_images = sampled_batch['stacked_images'] # [N, 10, 500, 500]
-            
+            stacked_image_1 = sampled_batch['stacked_image_1'] # [N, 9, 480, 640]
+            stacked_image_2 = sampled_batch['stacked_image_2'] # [N, 9, 480, 640]
+            cam_K_1 = sampled_batch['cam_K_1']
+            cam_K_2 = sampled_batch['cam_K_2']
+            cam_RT_1 = sampled_batch['cam_RT_1']
+            cam_RT_2 = sampled_batch['cam_RT_2']
+            distortion_1 = sampled_batch['distortion_1']
+            distortion_2 = sampled_batch['distortion_2']
+
             # stacking cam1, cam2 data to look like batch size == 2, but originally batch size should be 1.
-            image = torch.vstack((image_1, image_2)) # [2N, 3, 800, 800]
+            image = torch.vstack((stacked_image_1, stacked_image_2)) # [2N, 9, 480, 640]
             gt_belief_maps = torch.vstack((gt_belief_maps_1, gt_belief_maps_2))
-            pe = torch.vstack((pe, pe))
-            projected_keypoints = torch.vstack((projected_keypoints_1, projected_keypoints_2))
+            # pe = torch.vstack((pe, pe))
 
             image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
-            pe, projected_keypoints = pe.to(device), projected_keypoints.to(device)
+            # pe = pe.to(device)
             # stacked_images, gt_belief_maps = stacked_images.to(device), gt_belief_maps.to(device)
             
-            output = model(image, gt_belief_maps, pe) # [2N, 6, 2(h,w)]
-            # output = model(stacked_images)
+            # output = model(image, gt_belief_maps, pe) # [2N, 6, 2(h,w)]
+            output = model(image)
             
-            loss = F.mse_loss(output['pred_kps'], projected_keypoints)
+            loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)
             
-            test_loss_sum += loss.item()*len(sampled_batch)*2
-            num_tested_data += len(sampled_batch)*2
+            test_loss_sum += loss.item()*args.batch_size*2
+            num_tested_data += args.batch_size*2
             
             if args.digital_twin:
-                joint_angles_gt = [joint_angles_gt[i][0].item() for i in range(len(joint_angles_gt))]
-                # pred_keypoints = digital_twin.forward(output['pred_kps'][0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h
-                pred_keypoints = digital_twin.forward(projected_keypoints_1[0].cpu().numpy()[:, ::-1], projected_keypoints_2[0].cpu().numpy()[:, ::-1], joint_angles_gt) # w, h GT value input for validation
-                visualize_result(image_path_1[0], pred_keypoints, projected_keypoints_1[0].cpu().numpy())
+                # joint_angles_gt = [joint_angles_gt[i][0].item() for i in range(len(joint_angles_gt))]
+                # pred_keypoints = digital_twin.forward(extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy()), joint_angles_gt[0]) # w, h
+                pred_keypoints = digital_twin.forward(keypoints_GT_1[0], 
+                                                        keypoints_GT_2[0], 
+                                                        joint_angles_gt[0],
+                                                        cam_K_1, cam_K_2, cam_RT_1, cam_RT_2, distortion_1, distortion_2) # w, h GT value input for validation
+                visualize_result(image_path_1[0], 
+                                pred_keypoints, 
+                                keypoints_GT_1[0].numpy(),
+                                is_kp_normalized=False)
             else:
-                visualize_result(image_path_1[0], output['pred_kps'][0].cpu().numpy(), projected_keypoints_1[0].cpu().numpy())
-            
+                print('keypoints_GT_1', keypoints_GT_1.shape)
+                visualize_result(image_path_1[0], 
+                                extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy()), 
+                                keypoints_GT_1[0],
+                                is_kp_normalized=False)
+                        
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
@@ -199,6 +217,7 @@ def create_batch_belief_map(image_resolution, keypoints, sigma=10, noise_std=0):
     return out
 
 def extract_keypoints_from_belief_maps(belief_maps):    
+    print("belief_maps.shape", belief_maps.shape)
     keypoints = []
     for i in range(len(belief_maps)):
         indices = np.where(belief_maps[i] == belief_maps[i].max())
@@ -214,20 +233,23 @@ def save_belief_map_images(belief_maps, map_type):
         image = cv2.cvtColor(belief_maps[i].copy(), cv2.COLOR_GRAY2RGB)
         cv2.imwrite(f'visualize_{map_type}_belief_maps_{i}.png', image)
 
-def visualize_result(image_paths, pred_kps, gt_kps):
+def visualize_result(image_paths, pred_keypoints, gt_keypoints, is_kp_normalized):
     # visualize the joint position prediction wih ground truth for one sample
+    # pred_kps, gt_kps: [numJoints, 2(w,h order)]
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
     bgr_colors = rgb_colors[:, ::-1]
     image = cv2.imread(image_paths)
-    height, width, channel = image.shape
-    pred_keypoints = [[int(u*width), int(v*height)] for v, u in pred_kps]
-    gt_keypoints = [[int(u*width), int(v*height)] for v, u in gt_kps]
+    if is_kp_normalized:
+        height, width, channel = image.shape
+        pred_keypoints = [[int(u*width), int(v*height)] for u, v in pred_keypoints]
+        gt_keypoints = [[int(u*width), int(v*height)] for u, v in gt_keypoints]
     # pred_keypoints = extract_keypoints_from_belief_maps(pred_kps)     
-    # gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)         
+    # gt_keypoints = extract_keypoints_from_belief_maps(gt_belief_maps)
     # save_belief_map_images(pred_kps, 'pred')
     # save_belief_map_images(gt_belief_maps, 'gt')
     image = image.copy()
     for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints, gt_keypoints)):
+        print('gt_keypoint', gt_keypoint)
         cv2.drawMarker(image, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i].tolist(), markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=1)
         cv2.circle(image, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2)        
     cv2.imwrite(f'visualization_result/{image_paths[-9:]}', image)
@@ -272,8 +294,8 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/real/train', embed_dim=hidden_dim)
-    test_dataset = RobotDataset(data_dir='annotation/real/validation', embed_dim=hidden_dim)
+    train_dataset = RobotDataset(data_dir='annotation/real/test')
+    test_dataset = RobotDataset(data_dir='annotation/real/test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 

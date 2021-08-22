@@ -22,47 +22,16 @@ class DigitalTwin():
                     ):
         
         self.opt = lambda : None
-        # self.opt.nb_objects = 2
-        self.opt.spp = 100
-        self.opt.width = 500
-        self.opt.height = 500 
-        self.opt.noise = False
-        self.opt.frame_freq = 8
-        self.opt.nb_frames = 10000
-        self.opt.inputf = '../annotation/test_no_rand_obj'
-        self.opt.outf = 'joint_alignment'
-        self.opt.idx = 999
-
-        self.make_joint_sphere = False
-        
-        # # # # # # # # # # # # # # # # # # # # # # # # #
-        if os.path.isdir(self.opt.outf):
-            print(f'folder {self.opt.outf}/ exists')
-            existing_files = glob(f'{self.opt.outf}/*')
-            for f in existing_files:
-                os.remove(f)
-        else:
-            os.mkdir(self.opt.outf)
-            print(f'created folder {self.opt.outf}/')
-            
-        # # # # # # # # # # # # # # # # # # # # # # # # #
-        # for OpenCV based camera parameters (used to calculate keypoints)
-        self.cam_K = dataset.cam_K
-        self.cam_R_1 = dataset.cam_R_1
-        self.cam_R_2 = dataset.cam_R_2
-
-        # for OpenGL based camera parameters (used to capture image by p.getCameraImage)
-        camera_struct_look_at = dataset.camera_struct_look_at_1
-        fov = dataset.fov_1
-        self.cam_intrinsic = p.computeProjectionMatrixFOV(fov=fov, # [view angle in degree]
-                                            aspect=self.opt.width/self.opt.height,
-                                            nearVal=0.1,
-                                            farVal=100,
-                                            )
-        self.cam_extrinsic_1 = p.computeViewMatrix(cameraEyePosition=camera_struct_look_at['eye'],
-                                        cameraTargetPosition=camera_struct_look_at['at'],
-                                        cameraUpVector=camera_struct_look_at['up'],
-                                        )
+        self.width = 640
+        self.height = 480 
+                    
+        # camera parameters
+        self.cam_K_1 = None
+        self.cam_K_2 = None
+        self.cam_RT_1 = None
+        self.cam_RT_2 = None
+        self.distortion_1 = None
+        self.dotortion_2 = None
 
         # Setup bullet physics stuff
         self.seconds_per_step = 1.0 / 240.0
@@ -75,17 +44,18 @@ class DigitalTwin():
         # lets create a robot
         self.robotId_main = p.loadURDF(urdf_path, [0, 0, 0], useFixedBase=True, physicsClientId=self.physicsClient_main)
         self.robotId_jpnp = p.loadURDF(urdf_path, [0, 0, 0], useFixedBase=True, physicsClientId=self.physicsClient_jpnp)
-        p.resetBasePositionAndOrientation(self.robotId_main, [0, 0, 0.0], [0, 0, 0, 1], physicsClientId=self.physicsClient_main)
-        p.resetBasePositionAndOrientation(self.robotId_jpnp, [0, 0, 0.0], [0, 0, 0, 1], physicsClientId=self.physicsClient_jpnp)
+        basePose = p.getQuaternionFromEuler([0,0,np.pi])
+        p.resetBasePositionAndOrientation(self.robotId_main, [0.4, -0.15, 0.0], basePose, physicsClientId=self.physicsClient_main)
+        p.resetBasePositionAndOrientation(self.robotId_jpnp, [0.4, -0.15, 0.0], basePose, physicsClientId=self.physicsClient_jpnp)
 
         self.numJoints = p.getNumJoints(self.robotId_main, physicsClientId=self.physicsClient_main)
 
         p.setGravity(0, 0, -9.81, physicsClientId=self.physicsClient_main)
         p.setGravity(0, 0, -9.81, physicsClientId=self.physicsClient_main)
 
-        jointInfo = p.getJointInfo(self.robotId_main, 0, physicsClientId=self.physicsClient_main)
-        lower_limit = [p.getJointInfo(self.robotId_main, i, physicsClientId=self.physicsClient_main)[8] for i in range(self.numJoints)]
-        upper_limit = [p.getJointInfo(self.robotId_main, i, physicsClientId=self.physicsClient_main)[9] for i in range(self.numJoints)]
+        # jointInfo = p.getJointInfo(self.robotId_main, 0, physicsClientId=self.physicsClient_main)
+        # lower_limit = [p.getJointInfo(self.robotId_main, i, physicsClientId=self.physicsClient_main)[8] for i in range(self.numJoints)]
+        # upper_limit = [p.getJointInfo(self.robotId_main, i, physicsClientId=self.physicsClient_main)[9] for i in range(self.numJoints)]
 
         self.jointAngles_main = np.zeros(self.numJoints) # main robot
         self.jointAngles_jpnp = np.zeros(self.numJoints) # Joint PnP robot
@@ -113,21 +83,29 @@ class DigitalTwin():
             writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
 
-    def forward(self, target_keypoints_1, target_keypoints_2, joint_angles_gt):       
+    def forward(self, target_keypoints_1, target_keypoints_2, joint_angles_gt, cam_K_1, cam_K_2, cam_RT_1, cam_RT_2, distortion_1, distortion_2):       
 
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
-        target_keypoints_1 = target_keypoints_1*[self.opt.width, self.opt.height] # expand keypoint range to full width, height
-        target_keypoints_2 = target_keypoints_2*[self.opt.width, self.opt.height] # expand keypoint range to full width, height
+        # target_keypoints_1 = target_keypoints_1*[self.width, self.height] # expand keypoint range to full width, height
+        # target_keypoints_2 = target_keypoints_2*[self.width, self.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
         self.jointAngles_jpnp = self.jointAngles_main
-        target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # [12]
-        target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # [12]
-        target_keypoints = np.array(target_keypoints_1 + target_keypoints_2)
+        target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]
+        target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # flatten to [12,]
+        target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
+
+        # update camera parameters
+        self.cam_K_1 = cam_K_1
+        self.cam_K_2 = cam_K_2
+        self.cam_RT_1 = cam_RT_1
+        self.cam_RT_2 = cam_RT_2
+        self.distortion_1 = distortion_1
+        self.distortion_2 = distortion_2
 
         # Joint PnP
-        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1), self.cam_K, self.cam_R_1, self.cam_R_2)
-        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints), self.cam_K, self.cam_R_1, self.cam_R_2)
+        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
+        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
         self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
 
         # Kalman filter        
@@ -173,32 +151,32 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
-        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, self.opt, self.cam_K, self.cam_R_1)
-        keypoints = keypoints.reshape(-1,2)[:, ::-1] # [6, 2] (h, w)
-        keypoints /= [self.opt.height, self.opt.width]
+        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)
+        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)
+        keypoints = keypoints.reshape(-1,2) # [6, 2] (numJoints, (width, height))
+        # keypoints /= [self.width, self.height] # normalize
 
         self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
         return keypoints
 
-    def joint_pnp(self, target_keypoints, jointAngles_jpnp, cam_K, cam_R_1, cam_R_2):
+    def joint_pnp(self, target_keypoints, jointAngles_jpnp):
         jointAngles_init = jointAngles_jpnp.copy()
         eps = 1e-6
         # eps = np.linspace(1e-6, 1e-6, self.numJoints)
         iterations = 100 # This value can be adjusted.
         for iter in range(iterations): #self.jpnp_max_iterations
             # get joint 2d keypoint from 3d points and camera model
-            keypoints_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_1)
-            keypoints_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_2)
+            keypoints_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+            keypoints_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
             keypoints = np.vstack((keypoints_1, keypoints_2)).reshape(-1) # [24]
             # Jacobian approximation: keypoint rate (변화량)
             Jacobian = np.zeros((self.numJoints*2*2, self.numJoints)) # [24, 6]
             for col in range(self.numJoints):
                 eps_array = np.zeros(self.numJoints)
                 eps_array[col] = eps
-                keypoints_eps_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_1)
-                keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.opt, cam_K, cam_R_2)
+                keypoints_eps_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+                keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
                 keypoints_eps = np.vstack((keypoints_eps_1, keypoints_eps_2)).reshape(-1) # [24]
                 Jacobian[:,col] = (keypoints_eps - keypoints)/eps
             
@@ -294,16 +272,15 @@ class DigitalTwin():
                                 ))
             writer.writerow(message)
 
-    def get_my_keypoints(self, cam_K, cam_R, bodyUniqueId, physicsClientId, joint_world_position, opt):
-        # get 2d keypoints from 3d positions using camera K, R matrix (2021.06.30, Hyosung Hong)    
-        numJoints = p.getNumJoints(bodyUniqueId=bodyUniqueId, physicsClientId=physicsClientId)
-        jointPositions = np.zeros((numJoints, 3))
-        jointKeypoints = np.zeros((numJoints, 2))
-        for l in range(numJoints):
+    def get_my_keypoints(self, cam_K, cam_RT, joint_world_position):
+        # get 2d keypoints from 3d positions using camera K, R matrix (2021.06.30, Hyosung Hong)        
+        jointPositions = np.zeros((self.numJoints, 3))
+        jointKeypoints = np.zeros((self.numJoints, 2))
+        for l in range(self.numJoints):
             jointPosition = np.array(list(joint_world_position[l])+[1.]).reshape(4,1)
-            jointKeypoint = cam_K@cam_R@jointPosition
+            jointKeypoint = cam_K@cam_RT@jointPosition
             jointKeypoint /= jointKeypoint[-1]
-            jointKeypoint[0] = opt.width - jointKeypoint[0]   # OpenGL convention for left-right mirroring
+            jointKeypoint[0] = self.width - jointKeypoint[0]   # OpenGL convention for left-right mirroring
             jointPositions[l] = jointPosition.reshape(-1)[:3]
             jointKeypoints[l] = jointKeypoint.reshape(-1)[:2]
         # print('jointPositions: ', jointPositions)
@@ -326,7 +303,7 @@ class DigitalTwin():
             link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [8, 2]
         return np.array(link_world_state)
 
-    def get_joint_keypoints_from_angles(self, jointAngles, bodyUniqueId, physicsClientId, opt, cam_K, cam_R):
+    def get_joint_keypoints_from_angles(self, jointAngles, bodyUniqueId, physicsClientId, cam_K, cam_RT, distortion):
         for j in range(len(jointAngles)):
             p.resetJointState(bodyUniqueId=bodyUniqueId,
                             jointIndex=j,
@@ -341,18 +318,41 @@ class DigitalTwin():
             link_state = p.getLinkState(bodyUniqueId=bodyUniqueId, linkIndex=link_num, physicsClientId=physicsClientId)
             pos_world = list(link_state[4])
             rot_world = link_state[5] # world orientation of the URDF link frame        
-            if link_num == 4:
+            if link_num == 0: # sholder
                 rot_mat = p.getMatrixFromQuaternion(rot_world)
                 rot_mat = np.array(rot_mat).reshape(3,3)
-                offset = np.array([0,-0.04,0.08535])
+                offset = np.array([0,0,0])
                 pos_world = rot_mat.dot(offset) + pos_world
-            if link_num == 5:
+            if link_num == 1: # upper_arm
                 rot_mat = p.getMatrixFromQuaternion(rot_world)
                 rot_mat = np.array(rot_mat).reshape(3,3)
-                offset = np.array([0.0,0.0619,0])
+                offset = np.array([0,0,0.1198])
+                pos_world = rot_mat.dot(offset) + pos_world
+            if link_num == 2: # fore_arm
+                rot_mat = p.getMatrixFromQuaternion(rot_world)
+                rot_mat = np.array(rot_mat).reshape(3,3)
+                offset = np.array([0,0,0.025])
+                pos_world = rot_mat.dot(offset) + pos_world
+            if link_num == 3: # wrist 1
+                rot_mat = p.getMatrixFromQuaternion(rot_world)
+                rot_mat = np.array(rot_mat).reshape(3,3)
+                offset = np.array([0,0,-0.085])
+                pos_world = rot_mat.dot(offset) + pos_world
+            if link_num == 4: # wrist 2
+                rot_mat = p.getMatrixFromQuaternion(rot_world)
+                rot_mat = np.array(rot_mat).reshape(3,3)
+                offset = np.array([0,-0.045,0])
+                pos_world = rot_mat.dot(offset) + pos_world
+            if link_num == 5: # wrist 3
+                rot_mat = p.getMatrixFromQuaternion(rot_world)
+                rot_mat = np.array(rot_mat).reshape(3,3)
+                offset = np.array([0,0,0])
                 pos_world = rot_mat.dot(offset) + pos_world
             joint_world_position.append(pos_world)        
-        keypoints = self.get_my_keypoints(cam_K, cam_R, bodyUniqueId=bodyUniqueId, physicsClientId=physicsClientId, joint_world_position=joint_world_position, opt=opt)
+        # keypoints = self.get_my_keypoints(cam_K, cam_RT, joint_world_position=joint_world_position)
+        rvecs = cv2.Rodrigues(cam_RT[:,:-1])[0]
+        tvecs = cam_RT[:,-1]
+        keypoints, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
         return keypoints # [numJoints, 2]
 
 

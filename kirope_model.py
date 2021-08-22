@@ -25,9 +25,29 @@ class ResnetSimple(nn.Module):
             nn.ConvTranspose2d(
                 in_channels=2048,
                 out_channels=256,
-                kernel_size=5,
-                stride=5,
-                padding=0,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                output_padding=0,
+            ),
+            nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(
+                in_channels=256,
+                out_channels=256,
+                kernel_size=4,
+                stride=2,
+                padding=1,
                 output_padding=0,
             ),
             nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
@@ -69,7 +89,6 @@ class ResnetSimple(nn.Module):
         x = self.layer4(x)
         
         x = self.upsample(x)
-
 
         return {'pred_belief_maps': x}
 

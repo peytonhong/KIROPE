@@ -27,23 +27,23 @@ class RobotDataset(Dataset):
         # self.image_resize_16 = T.Resize(16)
         # self.embed_dim = embed_dim
         # Camera parameters
-        with open(self.label_paths_1[0]) as json_file:
-            label_1 = json.load(json_file)
-        with open(self.label_paths_2[0]) as json_file:
-            label_2 = json.load(json_file)
-        self.cam_K  = np.array(label_1['camera_data']['camera_intrinsics'])
-        self.cam_R_1 = np.array(label_1['camera_data']['camera_extrinsics'])
-        self.cam_R_2 = np.array(label_2['camera_data']['camera_extrinsics'])
-        self.camera_struct_look_at_1 = {'at': label_1['camera_data']['camera_look_at']['at'],
-                                'up':  label_1['camera_data']['camera_look_at']['up'],
-                                'eye': label_1['camera_data']['camera_look_at']['eye'],
-                                }
-        self.camera_struct_look_at_2 = {'at': label_2['camera_data']['camera_look_at']['at'],
-                                'up':  label_2['camera_data']['camera_look_at']['up'],
-                                'eye': label_2['camera_data']['camera_look_at']['eye'],
-                                }
-        self.fov_1 = label_1['camera_data']['fov']
-        self.fov_2 = label_2['camera_data']['fov']
+        # with open(self.label_paths_1[0]) as json_file:
+        #     label_1 = json.load(json_file)
+        # with open(self.label_paths_2[0]) as json_file:
+        #     label_2 = json.load(json_file)
+        # self.cam_K  = np.array(label_1['camera']['camera_intrinsic'])
+        # self.cam_R_1 = np.array(label_1['camera']['camera_extrinsic'])
+        # self.cam_R_2 = np.array(label_2['camera']['camera_extrinsic'])
+        # self.camera_struct_look_at_1 = {'at': label_1['camera_data']['camera_look_at']['at'],
+        #                         'up':  label_1['camera_data']['camera_look_at']['up'],
+        #                         'eye': label_1['camera_data']['camera_look_at']['eye'],
+        #                         }
+        # self.camera_struct_look_at_2 = {'at': label_2['camera_data']['camera_look_at']['at'],
+        #                         'up':  label_2['camera_data']['camera_look_at']['up'],
+        #                         'eye': label_2['camera_data']['camera_look_at']['eye'],
+        #                         }
+        # self.fov_1 = label_1['camera_data']['fov']
+        # self.fov_2 = label_2['camera_data']['fov']
 
     def __len__(self):
         return len(self.image_paths_1)
@@ -62,12 +62,12 @@ class RobotDataset(Dataset):
             label_1 = json.load(json_file)
         with open(self.label_paths_2[idx]) as json_file:
             label_2 = json.load(json_file)
-        joint_angles = label_1['objects']['joint_angles']
+        joint_angles = label_1['object']['joint_angles']
         # joint_velocities = label_1['objects']['joint_velocities']
         # joint_velocities[-1] = 0 # end-effector joint velocity set to zero (because it is too much fast)
         # joint_states = (np.stack([joint_angles, joint_velocities], axis=1))
-        projected_keypoints_wh_1 = label_1['objects']['projected_keypoints'] #[6, 2(w,h)]
-        projected_keypoints_wh_2 = label_2['objects']['projected_keypoints'] #[6, 2(w,h)]
+        projected_keypoints_wh_1 = label_1['object']['joint_keypoints'] #[6, 2(w,h)]
+        projected_keypoints_wh_2 = label_2['object']['joint_keypoints'] #[6, 2(w,h)]
         # numJoints = len(projected_keypoints_wh_1)
 
         belief_maps_1 = torch.tensor(self.create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]        
@@ -86,10 +86,18 @@ class RobotDataset(Dataset):
         # state_embeddings = state_embeddings.reshape(6, w_feature, w_feature)
         # image_1 = self.image_resize_800(image_1) # [3, 800, 800]
         # image_2 = self.image_resize_800(image_2) # [3, 800, 800]
-        # stacked_images = torch.cat((image_1, self.image_resize_800(state_embeddings)), dim=0) # [10, 800, 800]        
+        stacked_image_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, 800, 800]
+        stacked_image_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, 800, 800]
         # pe = positional_encoding(256, numJoints) # [6, 256]
         # projected_keypoints_hw_norm_1 = torch.tensor(np.array(projected_keypoints_wh_1)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
         # projected_keypoints_hw_norm_2 = torch.tensor(np.array(projected_keypoints_wh_2)[:, ::-1].copy()).type(torch.FloatTensor) / torch.tensor([h, w]) # [6, 2(h,w)]
+
+        cam_K_1  = np.array(label_1['camera']['camera_intrinsic'])
+        cam_K_2  = np.array(label_2['camera']['camera_intrinsic'])
+        cam_RT_1 = np.array(label_1['camera']['camera_extrinsic'])
+        cam_RT_2 = np.array(label_2['camera']['camera_extrinsic']) 
+        distortion_1 = label_1['camera']['camera_distortion']
+        distortion_2 = label_2['camera']['camera_distortion']
 
         sample = {
             'image_1': image_1, 
@@ -101,13 +109,20 @@ class RobotDataset(Dataset):
             # 'belief_maps_noise_1': belief_maps_noise_1, # [6, 480, 640]
             'belief_maps_2': belief_maps_2,  # [6, 480, 640]
             # 'belief_maps_noise_2': belief_maps_noise_2, # [6, 480, 640]
-            # 'projected_keypoints_1': projected_keypoints_hw_norm_1,  # [6, 2(h,w)]
-            # 'projected_keypoints_2': projected_keypoints_hw_norm_2,  # [6, 2(h,w)]
+            'keypoints_GT_1': projected_keypoints_wh_1,  # [6, 2(w,h)]
+            'keypoints_GT_2': projected_keypoints_wh_2,  # [6, 2(w,h)]
             # 'state_embeddings': state_embeddings.flatten(1),
             'image_path_1': image_path_1,
             'image_path_2': image_path_2,
-            # 'stacked_images': stacked_images,
+            'stacked_image_1': stacked_image_1,
+            'stacked_image_2': stacked_image_2,
             # 'positional_encoding': pe,
+            'cam_K_1': cam_K_1,
+            'cam_K_2': cam_K_2,
+            'cam_RT_1': cam_RT_1,
+            'cam_RT_2': cam_RT_2,
+            'distortion_1': distortion_1,
+            'distortion_2': distortion_2,
             }
         return sample
 

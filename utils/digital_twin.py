@@ -16,10 +16,7 @@ import csv
 
 class DigitalTwin():
 
-    def __init__(self, urdf_path=None, 
-                    dataset=None,
-                    save_images=False,
-                    ):
+    def __init__(self, urdf_path=None):
         
         self.opt = lambda : None
         self.width = 640
@@ -83,7 +80,7 @@ class DigitalTwin():
             writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
 
 
-    def forward(self, target_keypoints_1, target_keypoints_2, joint_angles_gt, cam_K_1, cam_K_2, cam_RT_1, cam_RT_2, distortion_1, distortion_2):       
+    def forward(self, target_keypoints_1, target_keypoints_2, sampled_batch):
 
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
@@ -96,12 +93,13 @@ class DigitalTwin():
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
 
         # update camera parameters
-        self.cam_K_1 = cam_K_1
-        self.cam_K_2 = cam_K_2
-        self.cam_RT_1 = cam_RT_1
-        self.cam_RT_2 = cam_RT_2
-        self.distortion_1 = distortion_1
-        self.distortion_2 = distortion_2
+        self.cam_K_1 = sampled_batch['cam_K_1'][0].numpy()
+        self.cam_K_2 = sampled_batch['cam_K_2'][0].numpy()
+        self.cam_RT_1 = sampled_batch['cam_RT_1'][0].numpy()
+        self.cam_RT_2 = sampled_batch['cam_RT_2'][0].numpy()
+        self.distortion_1 = sampled_batch['distortion_1'][0].numpy()
+        self.distortion_2 = sampled_batch['distortion_2'][0].numpy()
+        joint_angles_gt = sampled_batch['joint_angles'][0].numpy()
 
         # Joint PnP
         self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
@@ -151,14 +149,14 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)
-        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)
-        keypoints = keypoints.reshape(-1,2) # [6, 2] (numJoints, (width, height))
+        keypoints_1 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        keypoints_2 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+        # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)        
         # keypoints /= [self.width, self.height] # normalize
 
         self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
-        return keypoints
+        return keypoints_1, keypoints_2
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
         jointAngles_init = jointAngles_jpnp.copy()
@@ -194,7 +192,7 @@ class DigitalTwin():
         # angle_error = np.linalg.norm(jointAngles_init[:-1]*180/np.pi - jointAngles_jpnp[:-1]*180/np.pi)/self.numJoints
         angle_error = np.linalg.norm(np.sin(jointAngles_init[:-1]) - np.sin(jointAngles_jpnp[:-1]))/(self.numJoints-1)
         angle_error = np.arcsin(angle_error)*180/np.pi
-        print('angle_error: ', angle_error)
+        # print('angle_error: ', angle_error)
         # print(jointAngles_jpnp*180/np.pi)
         return jointAngles_jpnp, angle_error, iter
 
@@ -349,11 +347,13 @@ class DigitalTwin():
                 offset = np.array([0,0,0])
                 pos_world = rot_mat.dot(offset) + pos_world
             joint_world_position.append(pos_world)        
+        joint_world_position = np.array(joint_world_position)
         # keypoints = self.get_my_keypoints(cam_K, cam_RT, joint_world_position=joint_world_position)
+        
         rvecs = cv2.Rodrigues(cam_RT[:,:-1])[0]
         tvecs = cam_RT[:,-1]
         keypoints, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
-        return keypoints # [numJoints, 2]
+        return keypoints.squeeze() # [numJoints, 2]
 
 
     def clamping(self, min, val, max):
@@ -368,7 +368,15 @@ class DigitalTwin():
         assert len(a)==len(b), "Size of two tuples are not matched!"
         return tuple([sum(x) for x in zip(a, b)])
 
-
+    def zero_joint_state(self):
+        jointAngles = [0]*self.numJoints
+        for j in range(len(jointAngles)):
+            p.resetJointState(bodyUniqueId=self.robotId_main,
+                            jointIndex=j,
+                            targetValue=(jointAngles[j]),
+                            physicsClientId=self.physicsClient_main,
+                            )
+        p.stepSimulation(physicsClientId=self.physicsClient_main)
 
     
     def __del__(self):

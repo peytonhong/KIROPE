@@ -41,12 +41,17 @@ class RobotDataset(Dataset):
         with open(self.label_paths_2[idx]) as json_file:
             label_2 = json.load(json_file)
         joint_angles = np.array(label_1['object']['joint_angles'])
-        projected_keypoints_wh_1 = label_1['object']['joint_keypoints'] #[6, 2(w,h)]
-        projected_keypoints_wh_2 = label_2['object']['joint_keypoints'] #[6, 2(w,h)]
-
+        projected_keypoints_wh_1 = np.array(label_1['object']['joint_keypoints']) #[6, 2(w,h)]
+        projected_keypoints_wh_2 = np.array(label_2['object']['joint_keypoints']) #[6, 2(w,h)]
+        
         belief_maps_1 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
         belief_maps_2 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
-        
+        belief_maps_1_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=5)).type(torch.FloatTensor) # [6, h,w]
+        belief_maps_2_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=5)).type(torch.FloatTensor) # [6, h,w]
+        img_belief_1 = torch.cat((image_1, belief_maps_1_noise), dim=0) # [9, h, w]
+        img_belief_2 = torch.cat((image_2, belief_maps_2_noise), dim=0) # [9, h, w]
+        img_belief_stack = torch.cat((img_belief_1, img_belief_2), dim=0) # [18, h, w]
+
         # stacked_image_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, 800, 800]
         # stacked_image_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, 800, 800]
         cam_K_1  = np.array(label_1['camera']['camera_intrinsic'])
@@ -74,6 +79,7 @@ class RobotDataset(Dataset):
             # 'stacked_image_1': stacked_image_1,
             # 'stacked_image_2': stacked_image_2,
             # 'positional_encoding': pe,
+            'image_beliefmap_stack': img_belief_stack,
             'cam_K_1': cam_K_1,
             'cam_K_2': cam_K_2,
             'cam_RT_1': cam_RT_1,

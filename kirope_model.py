@@ -7,7 +7,8 @@ class ResnetSimple(nn.Module):
         super(ResnetSimple, self).__init__()
         net = resnet50(pretrained=pretrained)
         # self.conv1 = net.conv1
-        self.conv1 = nn.Conv2d(3+num_joints, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        # self.conv1 = nn.Conv2d(3+num_joints, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = self.depthwise_separable_conv((3+num_joints)*2, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = net.bn1
         self.relu = net.relu
         self.maxpool = net.maxpool
@@ -72,7 +73,7 @@ class ResnetSimple(nn.Module):
             ),
             nn.BatchNorm2d(256, momentum=BN_MOMENTUM),
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, num_joints, kernel_size=1, stride=1),
+            nn.Conv2d(256, num_joints*2, kernel_size=1, stride=1),
             nn.Sigmoid(),
         )
 
@@ -92,7 +93,12 @@ class ResnetSimple(nn.Module):
 
         return {'pred_belief_maps': x}
 
-
+    def depthwise_separable_conv(self, input_channels, output_channels, kernel_size, stride, padding, bias=False):
+        # depthwize conv -> 1x1 conv
+        depthwise_separable_conv_net = nn.Sequential(nn.Conv2d(input_channels, input_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=input_channels, bias=bias),
+                                                    nn.Conv2d(input_channels, output_channels, kernel_size=1, stride=1, bias=bias),
+                                                    )
+        return depthwise_separable_conv_net
 
 
 

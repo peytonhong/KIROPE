@@ -19,7 +19,7 @@ import subprocess
 # import matplotlib.pyplot as plt
 from tqdm import tqdm
 from dataset_load import RobotDataset
-from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
+from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple, UNet
 from utils.digital_twin import DigitalTwin
 from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
 from utils.util_functions import visualize_result_two_cams, visualize_two_stacked_images
@@ -124,8 +124,8 @@ def test(args, model, dataset, device, digital_twin):
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][0][6:].cpu().detach().numpy()), 
                                             sampled_batch
                                             )
-                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1, simga=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
-                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2, simga=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 visualize_result_two_cams(
                                 sampled_batch['image_path_1'][0], 
                                 pred_kps_1, 
@@ -170,20 +170,22 @@ def main(args):
     lr = 1e-4           # learning rate
     model_path = './checkpoints/model_best.pth.tar'
     # model_path = "checkpoints/attention_model/attention_normal.tar"
-
+    
     # model = KIROPE_Attention(num_joints=6, hidden_dim=hidden_dim)
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
-    if args.resume:
-        model = torch.load(model_path)
-    else:
-        model = ResnetSimple(num_joints=6)
-
     if torch.cuda.is_available(): # for multi gpu compatibility
-        device = 'cuda'        
-        model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device) 
+        device = 'cuda' 
     else:
         device = 'cpu'
-        model = nn.DataParallel(model).to(device)
+    
+    if args.resume:
+        model = torch.load(model_path)        
+    else:
+        # model = ResnetSimple(num_joints=6)
+        model = UNet(n_channels=18, n_classes=12)
+        if torch.cuda.is_available(): # for multi gpu compatibility        
+            model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device) 
+        
     # print(model)
 
     # for param in model.module.backbone.parameters():
@@ -191,7 +193,7 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/real/validation')
+    train_dataset = RobotDataset(data_dir='annotation/real/train')
     test_dataset = RobotDataset(data_dir='annotation/real/test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)

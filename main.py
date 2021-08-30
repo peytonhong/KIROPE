@@ -21,7 +21,8 @@ from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 from utils.digital_twin import DigitalTwin
-from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images, visualize_result_two_cams
+from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
+from utils.util_functions import visualize_result_two_cams, visualize_two_stacked_images
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -57,8 +58,8 @@ def train(args, model, dataset_iterator, device, optimizer):
     num_trained_data = 0    
 
     for iter, sampled_batch in enumerate(tqdm(dataset_iterator, desc=f"Training with batch size ({args.batch_size})")):
-        image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
-        image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
+        # image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
+        # image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
         gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
         gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
         
@@ -76,7 +77,9 @@ def train(args, model, dataset_iterator, device, optimizer):
         
         if iter%100 == 0:
             save_belief_map_images(output['pred_belief_maps'][0][:6].cpu().detach().numpy(), 'train_cam1')
-        
+        # visualize_two_stacked_images(sampled_batch['image_beliefmap_stack'][0].cpu().detach().numpy(), 
+        #                             sampled_batch['image_path_1'][0], 
+        #                             sampled_batch['image_path_2'][0])
         
         
     train_loss_sum /= num_trained_data
@@ -91,9 +94,9 @@ def test(args, model, dataset, device, digital_twin):
     num_tested_data = 0
     
     with torch.no_grad():
-        for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
-            image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
-            image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
+        for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({1})")):
+            # image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
+            # image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
             gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
             gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]     
             keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
@@ -112,8 +115,8 @@ def test(args, model, dataset, device, digital_twin):
             
             output = model(image)            
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)            
-            test_loss_sum += loss.item()*args.batch_size
-            num_tested_data += args.batch_size
+            test_loss_sum += loss.item()*1
+            num_tested_data += 1
 
             if args.digital_twin:                
                 pred_kps_1, pred_kps_2 = digital_twin.forward(
@@ -121,8 +124,8 @@ def test(args, model, dataset, device, digital_twin):
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][0][6:].cpu().detach().numpy()), 
                                             sampled_batch
                                             )
-                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
-                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1, simga=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2, simga=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 visualize_result_two_cams(
                                 sampled_batch['image_path_1'][0], 
                                 pred_kps_1, 
@@ -146,9 +149,9 @@ def test(args, model, dataset, device, digital_twin):
                                 )
             if iter%100 == 0:
                 save_belief_map_images(output['pred_belief_maps'][0][:6].cpu().detach().numpy(), 'test_cam1')
-            if iter == 280:
+            if iter == 588:
                 break
-                        
+
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
@@ -188,7 +191,7 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/real/train')
+    train_dataset = RobotDataset(data_dir='annotation/real/validation')
     test_dataset = RobotDataset(data_dir='annotation/real/test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)

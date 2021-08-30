@@ -118,3 +118,29 @@ def visualize_state_embeddings(state_embeddings):
         embedding = (state_embeddings[i]*255).astype(np.uint8)
         image = cv2.cvtColor(embedding, cv2.COLOR_GRAY2BGR)
         cv2.imwrite(file_name, image.copy())
+
+def visualize_two_stacked_images(image_beliefmap_stack, image_path1, image_path2):
+    image1 = cv2.imread(image_path1)
+    beliefmap1 = (image_beliefmap_stack[3:9].transpose([1,2,0])*255).astype(np.uint8)
+    image2 = cv2.imread(image_path2)
+    beliefmap2 = (image_beliefmap_stack[12:18].transpose([1,2,0])*255).astype(np.uint8)    
+    # image1 = cv2.cvtColor(image1, cv2.COLOR_RGB2BGR)
+    # image2 = cv2.cvtColor(image2, cv2.COLOR_RGB2BGR)    
+    height, width = image1.shape[:2]
+    beliefmap1_single_channel = np.zeros((height, width), dtype=np.int)
+    beliefmap2_single_channel = np.zeros((height, width), dtype=np.int)
+    for i in range(beliefmap1.shape[-1]):
+        beliefmap1_single_channel += beliefmap1[:,:,i]
+        beliefmap2_single_channel += beliefmap2[:,:,i]
+    # merge beliefmap in red channel    
+    image1 = image1.astype(np.int)
+    image2 = image2.astype(np.int)
+    image1[:,:,2] += beliefmap1_single_channel
+    image2[:,:,2] += beliefmap2_single_channel
+    image1[:,:,2][np.where(image1[:,:,2]>255)] = 255
+    image2[:,:,2][np.where(image2[:,:,2]>255)] = 255
+    image1 = image1.astype(np.uint8)
+    image2 = image2.astype(np.uint8)
+    image_hstack = np.hstack((image1, image2))
+    cv2.imwrite(f'visualization_result/image_beliefmap_stack/{image_path1[-8:]}', image_hstack)
+    # cv2.imwrite(f'visualization_result/image_beliefmap_stack/{image_path1[-8:]}', beliefmap1_single_channel)

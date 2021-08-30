@@ -46,8 +46,8 @@ class RobotDataset(Dataset):
         
         belief_maps_1 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
         belief_maps_2 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
-        belief_maps_1_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=5)).type(torch.FloatTensor) # [6, h,w]
-        belief_maps_2_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=5)).type(torch.FloatTensor) # [6, h,w]
+        belief_maps_1_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
+        belief_maps_2_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
         img_belief_1 = torch.cat((image_1, belief_maps_1_noise), dim=0) # [9, h, w]
         img_belief_2 = torch.cat((image_2, belief_maps_2_noise), dim=0) # [9, h, w]
         img_belief_stack = torch.cat((img_belief_1, img_belief_2), dim=0) # [18, h, w]

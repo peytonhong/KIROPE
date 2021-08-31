@@ -195,7 +195,7 @@ def main(args):
 
     train_dataset = RobotDataset(data_dir='annotation/real/train')
     test_dataset = RobotDataset(data_dir='annotation/real/test')
-    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
+    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
     
     # DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf")

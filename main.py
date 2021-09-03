@@ -174,8 +174,8 @@ def test(args, model, dataset, device, digital_twin):
                                 )
             if iter%100 == 0:
                 save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
-            if iter == 280:
-                break
+            # if iter == 280:
+            #     break
                         
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
@@ -198,17 +198,18 @@ def main(args):
 
     # model = KIROPE_Attention(num_joints=6, hidden_dim=hidden_dim)
     # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
+    if torch.cuda.is_available(): # for multi gpu compatibility
+        device = 'cuda'
+    else:
+        device = 'cpu'
+
     if args.resume:
         model = torch.load(model_path)
     else:
         model = ResnetSimple(num_joints=6)
-
-    if torch.cuda.is_available(): # for multi gpu compatibility
-        device = 'cuda'        
-        model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device) 
-    else:
-        device = 'cpu'
-        model = nn.DataParallel(model).to(device)
+        if torch.cuda.is_available(): # for multi gpu compatibility
+            device = 'cuda'        
+            model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device)
     # print(model)
 
     # for param in model.module.backbone.parameters():
@@ -216,7 +217,7 @@ def main(args):
         
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
-    train_dataset = RobotDataset(data_dir='annotation/real/train')
+    train_dataset = RobotDataset(data_dir='annotation/real/validation')
     test_dataset = RobotDataset(data_dir='annotation/real/test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)

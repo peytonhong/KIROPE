@@ -57,6 +57,8 @@ class DigitalTwin():
         self.jointAngles_main = np.zeros(self.numJoints) # main robot
         self.jointAngles_jpnp = np.zeros(self.numJoints) # Joint PnP robot
         self.jointVelocities_main = np.zeros(self.numJoints)
+        self.jointAngles_jpnp_cos = np.cos(self.jointAngles_jpnp)
+        self.jointAngles_jpnp_old = self.jointAngles_jpnp
 
         # Kalman filter variables
         nj = self.numJoints  # exclude end-effector
@@ -77,7 +79,12 @@ class DigitalTwin():
 
         with open('./utils/dt_debug.csv', 'w', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
-            writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
+            writer.writerow(['iter', 'angle_error', 
+                        'angle_gt_1','angle_gt_2','angle_gt_3','angle_gt_4','angle_gt_5', 'angle_gt_6', 
+                        'angle_cmd_1', 'angle_cmd_2', 'angle_cmd_3', 'angle_cmd_4', 'angle_cmd_5', 'angle_cmd_6', 
+                        'angle_main_1', 'angle_main_2', 'angle_main_3', 'angle_main_4', 'angle_main_5', 'angle_main_6', 
+                        'angle_jpnp_1', 'angle_jpnp_2', 'angle_jpnp_3', 'angle_jpnp_4', 'angle_jpnp_5', 'angle_jpnp_6', 
+                        ])
 
 
     def forward(self, target_keypoints_1, target_keypoints_2, sampled_batch):
@@ -87,7 +94,7 @@ class DigitalTwin():
         # target_keypoints_1 = target_keypoints_1*[self.width, self.height] # expand keypoint range to full width, height
         # target_keypoints_2 = target_keypoints_2*[self.width, self.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
-        self.jointAngles_jpnp = self.jointAngles_main
+        # self.jointAngles_jpnp = self.jointAngles_main
         target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]
         target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # flatten to [12,]
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
@@ -102,20 +109,26 @@ class DigitalTwin():
         joint_angles_gt = sampled_batch['joint_angles'][0].numpy()
 
         # Joint PnP
+        self.jointAngles_jpnp_old = self.jointAngles_jpnp
         self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
         # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
         self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
-
+        
+        self.jointAngles_jpnp = self.regulate_angle(self.jointAngles_jpnp, self.jointAngles_jpnp_old)
+        
+        angle_cos_diff = np.linalg.norm(self.jointAngles_jpnp_cos - np.cos(self.jointAngles_jpnp))
+        self.jointAngles_jpnp_cos = np.cos(self.jointAngles_jpnp) # update cos angles
         # Kalman filter        
         self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
-        # if angle_error < 5.:
-        #     self.R = np.eye(self.numJoints)*0.0001
+        # if angle_cos_diff < 6:
+        #     self.R = np.eye(self.numJoints) # valid measurement
         # else:
-        #     self.R = np.eye(self.numJoints)*1 # invalid measurement
+        #     self.R = np.eye(self.numJoints)*100000000 # invalid measurement
         # self.R = np.eye(self.numJoints)*100000
         # Update Kalman filter for self.jointAngles_main
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
-        
+        if angle_cos_diff > 6:
+            K = np.zeros_like(K)
         self.X = self.X + K @ (self.jointAngles_main.reshape(-1,1) - self.H @ self.X)
         
         self.P = (np.eye(2*self.numJoints) - K @ self.H) @ self.P
@@ -154,7 +167,7 @@ class DigitalTwin():
         # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)        
         # keypoints /= [self.width, self.height] # normalize
 
-        self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
+        self.save_debug_file([iter, angle_cos_diff, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
         return keypoints_1, keypoints_2
 
@@ -162,7 +175,7 @@ class DigitalTwin():
         jointAngles_init = jointAngles_jpnp.copy()
         eps = 1e-6
         # eps = np.linspace(1e-6, 1e-6, self.numJoints)
-        iterations = 100 # This value can be adjusted.
+        iterations = 30 # This value can be adjusted.
         for iter in range(iterations): #self.jpnp_max_iterations
             # get joint 2d keypoint from 3d points and camera model
             keypoints_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
@@ -252,6 +265,21 @@ class DigitalTwin():
     #         self.save_result_image(jointAngles_jpnp, target_keypoints)
         
     #     return jointAngles_jpnp, angle_error, retry, iter
+
+    def regulate_angle(self, jointAngles_jpnp, jointAngles_jpnp_old):
+        # modify new angles to have near value of old angles
+        # example: 179.41(old) -> -179.67(new) -> 180.32(modified)        
+        
+        for i in range(len(jointAngles_jpnp)):
+            if (jointAngles_jpnp[i] - jointAngles_jpnp_old[i]) < -np.pi:
+                r = np.abs((jointAngles_jpnp[i] - jointAngles_jpnp_old[i])//(2*np.pi))
+            elif (jointAngles_jpnp[i] - jointAngles_jpnp_old[i]) > np.pi:
+                r = -(1 + (jointAngles_jpnp[i] - jointAngles_jpnp_old[i])//(2*np.pi) )
+            else:
+                r = 0.0
+            jointAngles_jpnp[i] = jointAngles_jpnp[i] + r*2*np.pi
+        
+        return jointAngles_jpnp
 
     def angle_wrapper(self, angles):
         # wrapping angles to have vales between [-pi, pi)

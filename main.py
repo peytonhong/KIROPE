@@ -149,6 +149,11 @@ def test(args, model, dataset, device, digital_twin):
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().detach().numpy()), 
                                             sampled_batch
                                             )
+                # pred_kps_1, pred_kps_2 = digital_twin.forward(
+                #                             keypoints_GT_1, 
+                #                             keypoints_GT_2, 
+                #                             sampled_batch
+                #                             )
                 pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 visualize_result_two_cams(
@@ -222,8 +227,8 @@ def main(args):
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf")
-    DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf")
+    DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
+    DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
 
     if args.command == 'train':
         # CHECKPOINT_DIR

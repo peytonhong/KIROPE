@@ -109,8 +109,8 @@ def visualize_result_two_cams(image_paths_1, pred_keypoints_1, gt_keypoints_1,
         cv2.circle(image_2, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i].tolist(), thickness=2) 
     
     image_stack = np.hstack((image_2, image_1))
-    cv2.putText(image_stack, 'CAM 1', (width+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
-    cv2.putText(image_stack, 'CAM 2', (10,30),       fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
+    cv2.putText(image_stack, 'CAM1', (width+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
+    cv2.putText(image_stack, 'CAM2', (10,30),       fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
     cv2.imwrite(f'visualization_result/stacked_{image_paths_1[-8:]}', image_stack)
 
 def visualize_state_embeddings(state_embeddings):

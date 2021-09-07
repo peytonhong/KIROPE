@@ -22,7 +22,7 @@ from dataset_load import RobotDataset
 from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 from utils.digital_twin import DigitalTwin
 from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images, visualize_result_two_cams
-
+from glob import glob
 def str2bool(v):
     # Converts True or False for argparse
     if isinstance(v, bool):
@@ -114,6 +114,10 @@ def test(args, model, dataset, device, digital_twin):
     test_loss_sum = 0
     num_tested_data = 0
     
+    files = glob('visualization_result/*.jpg')
+    for f in files:
+        os.remove(f)
+
     with torch.no_grad():
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]

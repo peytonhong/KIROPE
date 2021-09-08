@@ -181,10 +181,11 @@ def test(args, model, dataset, device, digital_twin):
                                 keypoints_GT_2,
                                 is_kp_normalized=False
                                 )
-            if iter%100 == 0:
-                save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
-            # if iter == 280:
-            #     break
+            # if iter%100 == 0:
+            #     save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
+            if iter == 280:
+                save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
+                break
                         
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         

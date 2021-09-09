@@ -50,12 +50,14 @@ def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
 
 def extract_keypoints_from_belief_maps(belief_maps):
     keypoints = []
+    confidences = []
     for i in range(len(belief_maps)):
         indices = np.where(belief_maps[i] == belief_maps[i].max())
         keypoints.append([indices[1][0], indices[0][0]]) # keypoint format: [w, h]
+        confidences.append(belief_maps[i].max()) # confidence score between 0 to 1
         # print(belief_maps[0][i].max())
-        
-    return keypoints
+    
+    return (np.array(keypoints), np.array(confidences))
 
 def save_belief_map_images(belief_maps, map_type):
     # belief_maps: [numJoints, h, w]

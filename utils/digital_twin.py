@@ -58,7 +58,8 @@ class DigitalTwin():
         self.jointAngles_jpnp = np.zeros(self.numJoints) # Joint PnP robot
         self.jointVelocities_main = np.zeros(self.numJoints)
         self.jointAngles_jpnp_old = np.zeros(self.numJoints)
-
+        self.keypoints_1 = np.zeros((self.numJoints, 2))
+        self.keypoints_2 = np.zeros((self.numJoints, 2))
         # Kalman filter variables
         nj = self.numJoints  # exclude end-effector
         # self.dT = 1/self.frames_per_second
@@ -87,14 +88,23 @@ class DigitalTwin():
                         ])
 
 
-    def forward(self, target_keypoints_1, target_keypoints_2, sampled_batch):
+    def forward(self, target_keypoints_and_confidences_1, target_keypoints_and_confidences_2, sampled_batch):
 
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
+        target_keypoints_1, confidences_1 = target_keypoints_and_confidences_1 # tuple
+        target_keypoints_2, confidences_2 = target_keypoints_and_confidences_2 # tuple
         # target_keypoints_1 = target_keypoints_1*[self.width, self.height] # expand keypoint range to full width, height
         # target_keypoints_2 = target_keypoints_2*[self.width, self.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
         # self.jointAngles_jpnp = self.jointAngles_main
+        for i in range(self.numJoints):
+            # if confidence score of a keypoint is below threshold, load previously estimated keypoint.
+            if confidences_1[i] < 0.9:
+                target_keypoints_1[i] = self.keypoints_1[i]
+            if confidences_2[i] < 0.9: 
+                target_keypoints_2[i] = self.keypoints_2[i]
+        
         target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]
         target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # flatten to [12,]
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
@@ -127,10 +137,10 @@ class DigitalTwin():
         self.X = self.X + K @ (self.jointAngles_jpnp.reshape(-1,1) - self.H @ self.X)
         self.P = (np.eye(2*self.numJoints) - K @ self.H) @ self.P
         # filtered joint angle
-        self.jointAngles_main = self.X[:self.numJoints].reshape(-1)
-        self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
         self.X = self.A @ self.X
         self.P = self.A @ self.P @ np.transpose(self.A) + self.Q
+        self.jointAngles_main = self.X[:self.numJoints].reshape(-1)
+        self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
         # print(KF, self.jointAngles_jpnp[4]*180/np.pi, self.X[4]*180/np.pi)    
         
         jointAngle_command = self.jointAngles_main
@@ -158,14 +168,14 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        keypoints_1 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-        keypoints_2 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+        self.keypoints_1 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        self.keypoints_2 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
         # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)        
         # keypoints /= [self.width, self.height] # normalize
 
         self.save_debug_file([iter, angle_cos_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
-        return keypoints_1, keypoints_2
+        return self.keypoints_1, self.keypoints_2
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
         jointAngles_init = jointAngles_jpnp.copy()

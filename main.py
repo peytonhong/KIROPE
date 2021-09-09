@@ -6,6 +6,7 @@ Kinematics Guided Robot Pose Estimation with Monocular Camera. (KIROPE)
 Written by Hyosung Hong
 """
 
+from numpy.core.numeric import ones_like
 import torch
 from torch import nn
 import torch.optim as optim
@@ -154,8 +155,8 @@ def test(args, model, dataset, device, digital_twin):
                                             sampled_batch
                                             )
                 # pred_kps_1, pred_kps_2 = digital_twin.forward(
-                #                             keypoints_GT_1, 
-                #                             keypoints_GT_2, 
+                #                             tuple(keypoints_GT_1, np.ones_like(keypoints_GT_1)),
+                #                             tuple(keypoints_GT_2, np.ones_like(keypoints_GT_2)),
                 #                             sampled_batch
                 #                             )
                 pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
@@ -181,11 +182,12 @@ def test(args, model, dataset, device, digital_twin):
                                 keypoints_GT_2,
                                 is_kp_normalized=False
                                 )
-            # if iter%100 == 0:
-            #     save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
-            if iter == 280:
+            if iter == 488:
+                save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
                 save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
-                break
+            # if iter == 280:
+            #     save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
+            #     break
                         
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         

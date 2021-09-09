@@ -60,11 +60,11 @@ def train(args, model, dataset_iterator, device, optimizer):
     for iter, sampled_batch in enumerate(tqdm(dataset_iterator, desc=f"Training with batch size ({args.batch_size})")):
         # image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
         # image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
-        gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
-        gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
+        # gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
+        # gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
         
-        image = sampled_batch['image_beliefmap_stack'] # [N, 18, h, w] ### belief map NOISE is included!!!!!
-        gt_belief_maps = torch.cat((gt_belief_maps_1, gt_belief_maps_2), dim=1) # [N, 12, h , w]
+        image = sampled_batch['stacked_image'] # [N, 6, h, w]
+        gt_belief_maps = sampled_batch['stacked_beliefmap'] # [N, 12, h , w]
         
         image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
@@ -97,22 +97,15 @@ def test(args, model, dataset, device, digital_twin):
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({1})")):
             # image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
             # image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
-            gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
-            gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]     
+            # gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
+            # gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]     
             keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
             keypoints_GT_2 = sampled_batch['keypoints_GT_2'] # [N, 6, 2]
             
-            if iter == 0:
-                pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1).to(device) # [N, 9, 480, 640]
-                pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2).to(device) # [N, 9, 480, 640]
-        
-            image = sampled_batch['image_beliefmap_stack'] # [N, 18, h, w]
-            gt_belief_maps = torch.cat((gt_belief_maps_1, gt_belief_maps_2), dim=1) # [N, 12, h , w]
-            # insert two predicted beliefmaps into image_beliefmap_stack            
-            image[0,3:9] = pred_belief_maps_1[0]
-            image[0,12:18] = pred_belief_maps_2[0]
-            image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
+            image = sampled_batch['stacked_image'] # [N, 6, h, w]
+            gt_belief_maps = sampled_batch['stacked_beliefmap'] # [N, 12, h , w]
             
+            image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)            
             output = model(image)            
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)            
             test_loss_sum += loss.item()*1
@@ -124,8 +117,8 @@ def test(args, model, dataset, device, digital_twin):
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][0][6:].cpu().detach().numpy()), 
                                             sampled_batch
                                             )
-                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
-                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                # pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                # pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2, sigma=10)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 visualize_result_two_cams(
                                 sampled_batch['image_path_1'][0], 
                                 pred_kps_1, 
@@ -136,8 +129,8 @@ def test(args, model, dataset, device, digital_twin):
                                 is_kp_normalized=False
                                 )
             else:
-                pred_belief_maps_1 = output['pred_belief_maps'][0][:6].unsqueeze(0).detach()
-                pred_belief_maps_2 = output['pred_belief_maps'][0][6:].unsqueeze(0).detach()
+                # pred_belief_maps_1 = output['pred_belief_maps'][0][:6].unsqueeze(0).detach()
+                # pred_belief_maps_2 = output['pred_belief_maps'][0][6:].unsqueeze(0).detach()
                 visualize_result_two_cams(
                                 sampled_batch['image_path_1'][0],
                                 extract_keypoints_from_belief_maps(output['pred_belief_maps'][0][:6].cpu().numpy()),
@@ -149,8 +142,8 @@ def test(args, model, dataset, device, digital_twin):
                                 )
             if iter%100 == 0:
                 save_belief_map_images(output['pred_belief_maps'][0][:6].cpu().detach().numpy(), 'test_cam1')
-            if iter == 618:
-                break
+            # if iter == 618:
+            #     break
 
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
@@ -181,8 +174,8 @@ def main(args):
     if args.resume:
         model = torch.load(model_path)        
     else:
-        # model = ResnetSimple(num_joints=6)
-        model = UNet(n_channels=18, n_classes=12)
+        model = ResnetSimple(num_joints=6)
+        # model = UNet(n_channels=18, n_classes=12)
         if torch.cuda.is_available(): # for multi gpu compatibility        
             model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device) 
         

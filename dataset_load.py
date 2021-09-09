@@ -46,14 +46,16 @@ class RobotDataset(Dataset):
         
         belief_maps_1 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
         belief_maps_2 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
-        belief_maps_1_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
-        belief_maps_2_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
-        img_belief_1 = torch.cat((image_1, belief_maps_1_noise), dim=0) # [9, h, w]
-        img_belief_2 = torch.cat((image_2, belief_maps_2_noise), dim=0) # [9, h, w]
-        img_belief_stack = torch.cat((img_belief_1, img_belief_2), dim=0) # [18, h, w]
+        # belief_maps_1_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
+        # belief_maps_2_noise = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
+        # img_belief_1 = torch.cat((image_1, belief_maps_1_noise), dim=0) # [9, h, w]
+        # img_belief_2 = torch.cat((image_2, belief_maps_2_noise), dim=0) # [9, h, w]
+        # img_belief_stack = torch.cat((img_belief_1, img_belief_2), dim=0) # [18, h, w]
 
         # stacked_image_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, 800, 800]
         # stacked_image_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, 800, 800]
+        stacked_image = torch.cat((image_1, image_2), dim=0) # [6, h, w]
+        stacked_beliefmap = torch.cat((belief_maps_1, belief_maps_2), dim=0) # [12, h, w]
         cam_K_1  = np.array(label_1['camera']['camera_intrinsic'])
         cam_K_2  = np.array(label_2['camera']['camera_intrinsic'])
         cam_RT_1 = np.array(label_1['camera']['camera_extrinsic'])
@@ -78,8 +80,10 @@ class RobotDataset(Dataset):
             'image_path_2': image_path_2,
             # 'stacked_image_1': stacked_image_1,
             # 'stacked_image_2': stacked_image_2,
+            'stacked_image': stacked_image,
+            'stacked_beliefmap': stacked_beliefmap,
             # 'positional_encoding': pe,
-            'image_beliefmap_stack': img_belief_stack,
+            # 'image_beliefmap_stack': img_belief_stack,
             'cam_K_1': cam_K_1,
             'cam_K_2': cam_K_2,
             'cam_RT_1': cam_RT_1,

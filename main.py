@@ -162,6 +162,7 @@ def main(args):
     # hidden_dim = 256 # fixed for state embiddings
     lr = 1e-4           # learning rate
     model_path = './checkpoints/model_best.pth.tar'
+    model_path_train = './checkpoints/model_train.pth.tar'
     # model_path = "checkpoints/attention_model/attention_normal.tar"
     
     # model = KIROPE_Attention(num_joints=6, hidden_dim=hidden_dim)
@@ -213,6 +214,7 @@ def main(args):
             if best_test_loss > test_loss:
                 best_test_loss = test_loss
                 torch.save(model, model_path)
+            torch.save(model, model_path_train)
             # DT_train.zero_joint_state()
             DT_test.zero_joint_state()
 

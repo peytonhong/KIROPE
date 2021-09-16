@@ -5,8 +5,8 @@ import json
 import pybullet as p
 from tqdm import tqdm
 
-data_path = 'annotation/dataset_experiment/20210819_025345/'
-cam_type = 'cam2'
+data_path = 'annotation/real/test/20210819_025345_human/'
+cam_type = 'cam1'
 print(data_path + cam_type)
 
 def get_json_path(data_path, file_number):
@@ -151,7 +151,13 @@ for file_number in tqdm(range(num_data)):
     img = cv2.drawChessboardCorners(img, (cbcol, cbrow), keypoints, True)
 
     # Load camera parameter using File storage in OpenCV
-    cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_hong_640x480.yaml", cv2.FILE_STORAGE_READ)
+    if cam_type == 'cam1':
+        cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_hong_640x480.yaml", cv2.FILE_STORAGE_READ)
+    elif cam_type == 'cam2':
+        cv_file = cv2.FileStorage("experiment_data/camera_parameters/calib_result_L515_ivcl_640x480.yaml", cv2.FILE_STORAGE_READ)
+    else:
+        print('Cam type is invalid!')
+        exit()
     cam_K = cv_file.getNode("camera_matrix").mat()
     distortion = cv_file.getNode("dist_coeff").mat()
 

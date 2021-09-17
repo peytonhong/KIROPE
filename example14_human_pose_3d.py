@@ -174,7 +174,7 @@ def main(args):
     P_2 = cam_K_2 @ cam_RT_2
     # Full joint information: 17 joints 
     # [nose, L-eye, R-eye, L-ear, R-ear, L-shoulder, R-shoulder, L-elbow, R-elbow, L-wrist, R-wrist, L-pelvis, R-pelvis, L-knee, R-knee, L-ankle, R-ankle]
-    joint_interest = [0,1,2,5,6,7,8,9,10] # [nose, L-eye, R-eye, L-shoulder, R-shoulder, L-elbow, R-elbow, L-ankle, R-ankle]
+    joint_interest = [0,1,2,5,6,7,8,9,10,11,12] # [nose, L-eye, R-eye, L-shoulder, R-shoulder, L-elbow, R-elbow, L-wrist, R-wrist, L-pelvis, R-pelvis]
     
     
     for frame_i, (image_path_1, image_path_2) in enumerate(zip(im_list_1, im_list_2)):

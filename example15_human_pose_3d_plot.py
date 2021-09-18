@@ -23,7 +23,7 @@ fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
 # fig.clear()
-    
+
 for frame_i, human_pose_json_path in enumerate(human_pose_json_path):
     with open(human_pose_json_path, 'r') as json_file:
         human_pose_json = json.load(json_file)

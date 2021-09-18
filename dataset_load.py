@@ -17,7 +17,7 @@ class RobotDataset(Dataset):
         self.image_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.jpg')))
         self.label_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.json')))
         self.image_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.jpg')))
-        self.label_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.json')))
+        self.label_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.json')))        
         # standard PyTorch mean-std input image normalization
         self.image_transform = T.Compose([
             # T.Resize(800),

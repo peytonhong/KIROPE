@@ -22,7 +22,8 @@ from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 from utils.digital_twin import DigitalTwin
-from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images, visualize_result_two_cams
+from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
+from utils.util_functions import visualize_result_two_cams, visualize_result_robot_human_two_cams
 from glob import glob
 def str2bool(v):
     # Converts True or False for argparse
@@ -129,7 +130,11 @@ def test(args, model, dataset, device, digital_twin):
             keypoints_GT_2 = sampled_batch['keypoints_GT_2'] # [N, 6, 2]
             keypoints_GT_1 = [[keypoints_GT_1[i][0].item(), keypoints_GT_1[i][1].item()] for i in range(len(keypoints_GT_1))]
             keypoints_GT_2 = [[keypoints_GT_2[i][0].item(), keypoints_GT_2[i][1].item()] for i in range(len(keypoints_GT_2))]
-            
+            cam_K_1  = np.array(sampled_batch['cam_K_1'])
+            cam_RT_1 = np.array(sampled_batch['cam_RT_1'])
+            cam_K_2  = np.array(sampled_batch['cam_K_2'])
+            cam_RT_2 = np.array(sampled_batch['cam_RT_2'])
+
             if iter == 0:
                 pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1).to(device) # [N, 9, 480, 640]
                 pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2).to(device) # [N, 9, 480, 640]
@@ -161,25 +166,27 @@ def test(args, model, dataset, device, digital_twin):
                 #                             )
                 pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
                 pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0).to(device)
-                visualize_result_two_cams(
+                visualize_result_robot_human_two_cams(
                                 sampled_batch['image_path_1'][0], 
                                 pred_kps_1, 
                                 keypoints_GT_1,
                                 sampled_batch['image_path_2'][0], 
                                 pred_kps_2, 
                                 keypoints_GT_2,
+                                cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
                                 is_kp_normalized=False
                                 )
             else:
                 pred_belief_maps_1 = output['pred_belief_maps'][0].unsqueeze(0).detach()
                 pred_belief_maps_2 = output['pred_belief_maps'][1].unsqueeze(0).detach()
-                visualize_result_two_cams(
+                visualize_result_robot_human_two_cams(
                                 sampled_batch['image_path_1'][0],
                                 extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy()),
                                 keypoints_GT_1,
                                 sampled_batch['image_path_2'][0],
                                 extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy()),
                                 keypoints_GT_2,
+                                cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
                                 is_kp_normalized=False
                                 )
             if iter == 488:

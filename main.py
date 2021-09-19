@@ -173,6 +173,7 @@ def test(args, model, dataset, device, digital_twin):
                                 sampled_batch['image_path_2'][0], 
                                 pred_kps_2, 
                                 keypoints_GT_2,
+                                digital_twin,
                                 cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
                                 is_kp_normalized=False
                                 )
@@ -186,6 +187,7 @@ def test(args, model, dataset, device, digital_twin):
                                 sampled_batch['image_path_2'][0],
                                 extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy()),
                                 keypoints_GT_2,
+                                digital_twin,
                                 cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
                                 is_kp_normalized=False
                                 )

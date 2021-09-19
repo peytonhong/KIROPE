@@ -29,6 +29,7 @@ class DigitalTwin():
         self.cam_RT_2 = None
         self.distortion_1 = None
         self.dotortion_2 = None
+        self.fov = 43*np.pi/180 # Intel Realsense L515
 
         # Setup bullet physics stuff
         self.seconds_per_step = 1.0 / 240.0

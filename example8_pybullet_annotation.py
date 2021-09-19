@@ -160,6 +160,8 @@ cam_extrinsic_2 = p.computeViewMatrix(cameraEyePosition=camera_struct_look_at_2[
                                 cameraUpVector=camera_struct_look_at_2['up'],
                                 )
 
+
+
 # cam_K = np.array(cam_intrinsic).reshape(4,4).transpose()
 cam_R_1 = np.array(cam_extrinsic_1).reshape(4,4).transpose()
 cam_R_2 = np.array(cam_extrinsic_2).reshape(4,4).transpose()

@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import os
 import json
+import pybullet as p
 
 def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
     '''
@@ -126,6 +127,7 @@ def visualize_result_two_cams(image_paths_1, pred_keypoints_1, gt_keypoints_1,
 
 def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_keypoints_1, 
                             image_path_2, pred_keypoints_2, gt_keypoints_2, 
+                            digital_twin,
                             cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
                             is_kp_normalized):
     # visualize the joint position prediction wih ground truth for one sample
@@ -151,6 +153,8 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
         cv2.circle(image_2, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i], thickness=2) 
         # draw_lines_robot(image_2, pred_keypoints_2, bgr_colors)
     
+    
+    
     # draw human pose skeleton lines if it exists
     folder, file_name = os.path.split(image_path_1)
     parent_folder, cam_foler = os.path.split(folder)
@@ -167,6 +171,10 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
     cv2.putText(image_stack, 'CAM1', (width+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
     cv2.putText(image_stack, 'CAM2', (10,30),       fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
     cv2.imwrite(f'visualization_result/stacked_{image_path_1[-8:]}', image_stack)
+    
+    # get_robot_image(digital_twin, cam_K_2, cam_RT_2)
+    
+    
 
 def draw_lines_robot(image, keypoints, colormap):
     for i in range(len(keypoints)-1):
@@ -193,3 +201,49 @@ def draw_lines_human(image, p3d, cam_K, cam_RT):
     
     for _c in joint_connections:
         cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color=(0,255,0), thickness=2)
+
+def get_robot_image(digital_twin, cam_K, cam_RT):
+    cam_K = cam_K.reshape(-1)
+    fov = digital_twin.fov*0.5
+    aspect = digital_twin.width/digital_twin.height
+    nearVal = 0.1
+    farVal = 10    
+    cam_K_opengl = np.array([[1/(aspect*np.tan(fov/2)), 0, 0, 0],
+                             [0, 1/np.tan(fov/2), 0, 0],
+                             [0, 0, (nearVal+farVal)/(nearVal-farVal), 2*nearVal*farVal/(nearVal-farVal)],
+                             [0, 0, -1, 0]]).reshape(-1)
+    cam_intrinsic = p.computeProjectionMatrixFOV(fov=fov*180/np.pi, # [view angle in degree]
+                                            aspect=digital_twin.width/digital_twin.height,
+                                            nearVal=0.1,
+                                            farVal=100,
+                                            )
+    cam_pos = -cam_RT[:,:3].transpose() @ cam_RT[:,-1]
+    cam_RT = cam_RT.transpose().reshape(-1)
+    
+    camera_struct_look_at_1 = {
+        'at':[0,0,0],
+        'up':[0,0,1],
+        'eye':cam_pos.tolist()
+    }
+    cam_extrinsic = p.computeViewMatrix(cameraEyePosition=camera_struct_look_at_1['eye'],
+                                cameraTargetPosition=camera_struct_look_at_1['at'],
+                                cameraUpVector=camera_struct_look_at_1['up'],
+                                )
+    print(cam_pos)
+    print(cam_extrinsic)
+    image_arr = p.getCameraImage(digital_twin.width,
+                            digital_twin.height,
+                            viewMatrix=cam_extrinsic,
+                            projectionMatrix=cam_intrinsic,
+                            shadow=1,
+                            lightDirection=[1, 1, 1],
+                            renderer=p.ER_BULLET_HARDWARE_OPENGL, #p.ER_TINY_RENDERER, #p.ER_BULLET_HARDWARE_OPENGL
+                            physicsClientId=digital_twin.physicsClient_main
+                            )
+
+
+    image = np.array(image_arr[2]) # [height, width, 4]
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    mask = np.array(image_arr[4])
+    cv2.imwrite('sample.jpg', image)
+    print(mask.shape)

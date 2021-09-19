@@ -24,18 +24,17 @@ targetJointPoses = test_dataset[idx]['joint_angles']
 
 while(1):
     for j in range(numJoints):
-                p.setJointMotorControl2(bodyIndex=robotId,
-                                        jointIndex=j,
-                                        controlMode=p.POSITION_CONTROL,
-                                        targetPosition=targetJointPoses[j],
-                                        targetVelocity=0,
-                                        force=5000,
-                                        positionGain=0.1,
-                                        velocityGain=0.5)
+        p.setJointMotorControl2(bodyIndex=robotId,
+                                jointIndex=j,
+                                controlMode=p.POSITION_CONTROL,
+                                targetPosition=targetJointPoses[j],
+                                targetVelocity=0,
+                                force=5000,
+                                positionGain=0.1,
+                                velocityGain=0.5)
 
     p.stepSimulation()
     break
-
 
 def get_joint_keypoints_from_angles(jointAngles, bodyUniqueId, physicsClientId, cam_K, cam_RT, distortion):
     for j in range(len(jointAngles)):

@@ -61,6 +61,8 @@ class DigitalTwin():
         self.jointAngles_jpnp_old = np.zeros(self.numJoints)
         self.keypoints_1 = np.zeros((self.numJoints, 2))
         self.keypoints_2 = np.zeros((self.numJoints, 2))
+        self.jointWorldPosition_pred = np.zeros((self.numJoints, 3))
+        self.jointWorldPosition_gt = np.zeros((self.numJoints, 3))
         # Kalman filter variables
         nj = self.numJoints  # exclude end-effector
         # self.dT = 1/self.frames_per_second
@@ -169,13 +171,15 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        self.keypoints_1 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-        self.keypoints_2 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+        self.keypoints_1, _ = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        self.keypoints_2, _ = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
         # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)        
         # keypoints /= [self.width, self.height] # normalize
 
         self.save_debug_file([iter, angle_cos_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
+        _, self.jointWorldPosition_pred = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        _, self.jointWorldPosition_gt = self.get_joint_keypoints_from_angles(joint_angles_gt, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
         return self.keypoints_1, self.keypoints_2
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
@@ -184,16 +188,16 @@ class DigitalTwin():
         # eps = np.linspace(1e-6, 1e-6, self.numJoints)
         for iter in range(self.jpnp_max_iterations): #self.jpnp_max_iterations
             # get joint 2d keypoint from 3d points and camera model
-            keypoints_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-            keypoints_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+            keypoints_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+            keypoints_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
             keypoints = np.vstack((keypoints_1, keypoints_2)).reshape(-1) # [24]
             # Jacobian approximation: keypoint rate (변화량)
             Jacobian = np.zeros((self.numJoints*2*2, self.numJoints)) # [24, 6]
             for col in range(self.numJoints):
                 eps_array = np.zeros(self.numJoints)
                 eps_array[col] = eps
-                keypoints_eps_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-                keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+                keypoints_eps_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+                keypoints_eps_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
                 keypoints_eps = np.vstack((keypoints_eps_1, keypoints_eps_2)).reshape(-1) # [24]
                 Jacobian[:,col] = (keypoints_eps - keypoints)/eps
             
@@ -386,7 +390,7 @@ class DigitalTwin():
         rvecs = cv2.Rodrigues(cam_RT[:,:-1])[0]
         tvecs = cam_RT[:,-1]
         keypoints, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
-        return keypoints.squeeze() # [numJoints, 2]
+        return keypoints.squeeze(), joint_world_position # [numJoints, 2], [numJoints, 3]
 
 
     def clamping(self, min, val, max):

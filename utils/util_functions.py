@@ -247,3 +247,24 @@ def get_robot_image(digital_twin, cam_K, cam_RT):
     mask = np.array(image_arr[4])
     cv2.imwrite('sample.jpg', image)
     print(mask.shape)
+
+def get_pck_score(kps_pred, kps_gt, threshold=10):    
+    # PCK: Percentage of Correct Keypoints with in threshold pixel
+    pck = []
+    for i in range(len(kps_gt)):
+        error_2d = np.linalg.norm(kps_pred[i] - kps_gt[i])
+        if error_2d < threshold:
+            pck.append(True)
+        else:
+            pck.append(False)
+    return np.mean(pck) # return percentage of Trues.
+
+def get_add_score(pos_pred, pos_gt, threshold=0.020):
+    add = []
+    for i in range(len(pos_gt)):
+        error_3d = np.linalg.norm(pos_pred[i] - pos_gt[i])
+        if error_3d < threshold:
+            add.append(True)
+        else:
+            add.append(False)    
+    return np.mean(add)

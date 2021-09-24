@@ -24,7 +24,7 @@ from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 from utils.digital_twin import DigitalTwin
 from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
 from utils.util_functions import visualize_result_two_cams, visualize_result_robot_human_two_cams
-from utils.util_functions import get_pck_score, get_add_score
+from utils.util_functions import get_pck_score, get_add_score, save_metric_json
 from glob import glob
 def str2bool(v):
     # Converts True or False for argparse
@@ -118,6 +118,8 @@ def test(args, model, dataset, device, digital_twin):
     num_tested_data = 0
     pck_scores = []
     add_scores = []
+    pck_thresholds = np.linspace(0, 20, 50) # thresholds to evaluate [pixel]
+    add_thresholds = np.linspace(0, 0.100, 50) # thresholds to evaluate [m]
     
     files = glob('visualization_result/*.jpg')
     for f in files:
@@ -181,9 +183,9 @@ def test(args, model, dataset, device, digital_twin):
                                 is_kp_normalized=False
                                 )
                 
-                pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, threshold=10)
+                pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, pck_thresholds)
                 pck_scores.append(pck_score)
-                add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, threshold=0.020)
+                add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)
                 add_scores.append(add_score)
             else:
                 pred_belief_maps_1 = output['pred_belief_maps'][0].unsqueeze(0).detach()
@@ -209,10 +211,12 @@ def test(args, model, dataset, device, digital_twin):
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
-        pck_scores = np.mean(pck_scores)
-        add_scores = np.mean(add_scores)
-        print(f'PCK score: {pck_scores:.3f}')
-        print(f'ADD score: {add_scores:.3f}')
+        pck_scores = np.mean(pck_scores, axis=0)
+        add_scores = np.mean(add_scores, axis=0)
+        print(f'PCK scores: {pck_scores}')
+        print(f'ADD scores: {add_scores}')
+        save_metric_json(pck_thresholds, pck_scores, 'PCK')
+        save_metric_json(add_thresholds, add_scores, 'ADD')
 
     return test_loss_sum
 

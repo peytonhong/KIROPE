@@ -63,6 +63,7 @@ class DigitalTwin():
         self.keypoints_2 = np.zeros((self.numJoints, 2))
         self.jointWorldPosition_pred = np.zeros((self.numJoints, 3))
         self.jointWorldPosition_gt = np.zeros((self.numJoints, 3))
+        
         # Kalman filter variables
         nj = self.numJoints  # exclude end-effector
         # self.dT = 1/self.frames_per_second
@@ -180,6 +181,7 @@ class DigitalTwin():
 
         _, self.jointWorldPosition_pred = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
         _, self.jointWorldPosition_gt = self.get_joint_keypoints_from_angles(joint_angles_gt, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        
         return self.keypoints_1, self.keypoints_2
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
@@ -333,9 +335,10 @@ class DigitalTwin():
                 rot_world = link_state[1]
             else: # link
                 link_state = p.getLinkState(bodyUniqueId=bodyUniqueId, linkIndex=link_num-1, physicsClientId=physicsClientId)
-                pos_world = self.add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
+                # pos_world = self.add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
+                pos_world = link_state[4]
                 rot_world = link_state[5] # world orientation of the URDF link frame
-            link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [8, 2]
+                link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [numJoints, 2]
         return np.array(link_world_state)
 
     def get_joint_keypoints_from_angles(self, jointAngles, bodyUniqueId, physicsClientId, cam_K, cam_RT, distortion):

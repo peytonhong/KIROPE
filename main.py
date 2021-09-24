@@ -213,8 +213,6 @@ def test(args, model, dataset, device, digital_twin):
         test_loss_sum /= num_tested_data
         pck_scores = np.mean(pck_scores, axis=0)
         add_scores = np.mean(add_scores, axis=0)
-        print(f'PCK scores: {pck_scores}')
-        print(f'ADD scores: {add_scores}')
         save_metric_json(pck_thresholds, pck_scores, 'PCK')
         save_metric_json(add_thresholds, add_scores, 'ADD')
 

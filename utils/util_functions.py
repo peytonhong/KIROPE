@@ -1,3 +1,4 @@
+from unicodedata import digit
 import numpy as np
 import cv2
 import os
@@ -154,19 +155,23 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
         cv2.circle(image_2, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i], thickness=2) 
         # draw_lines_robot(image_2, pred_keypoints_2, bgr_colors)
     
-    
+    robot_pos_3d = digital_twin.jointWorldPosition_pred
     
     # draw human pose skeleton lines if it exists
     folder, file_name = os.path.split(image_path_1)
     parent_folder, cam_foler = os.path.split(folder)
     file_name = file_name[:4] + '.json'
     human_pose_path = os.path.join(parent_folder, 'human_pose', file_name)
+    collision_index = np.array([[],[]])
     if os.path.exists(human_pose_path):
         with open(human_pose_path, 'r') as json_file:
-            human_pose_json = json.load(json_file)
-        human_pose_3d = np.array(human_pose_json['joint_3d_positions'])
-        draw_lines_human(image_1, human_pose_3d, cam_K_1, cam_RT_1)
-        draw_lines_human(image_2, human_pose_3d, cam_K_2, cam_RT_2)
+            human_pos_json = json.load(json_file)
+        human_pos_3d = np.array(human_pos_json['joint_3d_positions'])
+        collision_index = get_collision_index(robot_pos_3d, human_pos_3d, threshold=0.3)
+        draw_lines_human(image_1, human_pos_3d, cam_K_1, cam_RT_1, collision_index)
+        draw_lines_human(image_2, human_pos_3d, cam_K_2, cam_RT_2, collision_index)
+    draw_lines_robot(image_1, robot_pos_3d, cam_K_1, cam_RT_1, collision_index)
+    draw_lines_robot(image_2, robot_pos_3d, cam_K_2, cam_RT_2, collision_index)
 
     image_stack = np.hstack((image_2, image_1))
     cv2.putText(image_stack, 'CAM1', (width+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
@@ -175,13 +180,36 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
     
     # get_robot_image(digital_twin, cam_K_2, cam_RT_2)
     
-    
 
-def draw_lines_robot(image, keypoints, colormap):
-    for i in range(len(keypoints)-1):
-        cv2.line(image, (int(keypoints[i][0]), int(keypoints[i][1])), (int(keypoints[i+1][0]), int(keypoints[i+1][1])), color=colormap[i], thickness=2)
+def get_collision_index(robot_pos_3d, human_pos_3d, threshold=0.3):
+    # calculate Euclidean distance between each object's joints
+    robot_collision_index = []
+    human_collision_index = []
+    for r in range(len(robot_pos_3d)):
+        for h in range(len(human_pos_3d)):
+            distance = np.linalg.norm(robot_pos_3d[r]-human_pos_3d[h]) # Euclidean distance
+            if distance < threshold:
+                robot_collision_index.append(r)
+                human_collision_index.append(h)
+    return np.stack((robot_collision_index, human_collision_index)) # [2, num_collisions]
+
+def draw_lines_robot(image, p3d, cam_K, cam_RT, collision_index):
+    keypoints = []
+    for point_3d in p3d:
+        point_3d = np.append(point_3d, [1])
+        keypoint = cam_K @ cam_RT @ point_3d.reshape(-1,1)
+        keypoint /= keypoint[-1]
+        keypoints.append(keypoint)
+    joint_connections = [[0,1],[1,2],[2,3],[3,4],[4,5]]
+    keypoints = np.array(keypoints).reshape(-1,3)
+    for _c in joint_connections:
+        if _c[0] in collision_index[0,:] or _c[1] in collision_index[0,:]:
+            color=(0,0,255)
+        else:
+            color=(0,255,0)
+        cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color, thickness=2)
     
-def draw_lines_human(image, p3d, cam_K, cam_RT):
+def draw_lines_human(image, p3d, cam_K, cam_RT, collision_index):
     # draw human pose skeleton lines based on estimated 3d points
     
     # add neck position (center of shoulders)
@@ -196,12 +224,16 @@ def draw_lines_human(image, p3d, cam_K, cam_RT):
         keypoint = cam_K @ cam_RT @ point_3d.reshape(-1,1)
         keypoint /= keypoint[-1]
         keypoints.append(keypoint)
-        cv2.circle(image, (keypoint[0], keypoint[1]), radius=2, color=(0,255,0), thickness=2)
+        cv2.circle(image, (keypoint[0], keypoint[1]), radius=2, color=(255,255,255), thickness=2)
     joint_connections = [[0,1], [0,2], [0,11], [11,3], [11,4], [3,5], [4,6], [5,7], [6,8], [3,9], [4,10], [9,10]]
     keypoints = np.array(keypoints).reshape(-1,3)
     
     for _c in joint_connections:
-        cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color=(0,255,0), thickness=2)
+        if _c[0] in collision_index[1,:] or _c[1] in collision_index[1,:]:
+            color=(0,0,255)
+        else:
+            color=(235,206,135)
+        cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color, thickness=2)
 
 def get_robot_image(digital_twin, cam_K, cam_RT):
     cam_K = cam_K.reshape(-1)

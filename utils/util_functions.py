@@ -146,7 +146,8 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
         gt_keypoints_2 = [[int(u*width), int(v*height)] for u, v in gt_keypoints_2]
     image_1 = image_1.copy()
     image_2 = image_2.copy()
-    for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints_1, gt_keypoints_1)):
+    
+    for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints_1, gt_keypoints_1)):      
         cv2.drawMarker(image_1, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i], markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=2)
         cv2.circle(image_1, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i], thickness=2)        
         # draw_lines_robot(image_1, pred_keypoints_1, bgr_colors)

@@ -182,25 +182,26 @@ def test(args, model, dataset, device, digital_twin):
                                 cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
                                 is_kp_normalized=False
                                 )
-                
-                pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, pck_thresholds)
-                pck_scores.append(pck_score)
                 add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)
                 add_scores.append(add_score)
+                
             else:
-                pred_belief_maps_1 = output['pred_belief_maps'][0].unsqueeze(0).detach()
-                pred_belief_maps_2 = output['pred_belief_maps'][1].unsqueeze(0).detach()
+                pred_kps_1, _ = extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy())
+                pred_kps_2, _ = extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy())
                 visualize_result_robot_human_two_cams(
                                 sampled_batch['image_path_1'][0],
-                                extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy()),
+                                pred_kps_1,
                                 keypoints_GT_1,
                                 sampled_batch['image_path_2'][0],
-                                extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy()),
+                                pred_kps_2,
                                 keypoints_GT_2,
                                 digital_twin,
-                                cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
+                                cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
                                 is_kp_normalized=False
                                 )
+            pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, pck_thresholds)
+            pck_scores.append(pck_score)            
+            
             if iter == 488:
                 save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
                 save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
@@ -211,10 +212,11 @@ def test(args, model, dataset, device, digital_twin):
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
-        pck_scores = np.mean(pck_scores, axis=0)
-        add_scores = np.mean(add_scores, axis=0)
+        pck_scores = np.mean(pck_scores, axis=0)        
         save_metric_json(pck_thresholds, pck_scores, 'PCK')
-        save_metric_json(add_thresholds, add_scores, 'ADD')
+        if args.digital_twin:
+            add_scores = np.mean(add_scores, axis=0)
+            save_metric_json(add_thresholds, add_scores, 'ADD')
 
     return test_loss_sum
 

@@ -5,6 +5,12 @@ import os
 import json
 import pybullet as p
 import matplotlib.pyplot as plt
+import imgaug as ia
+from imgaug.augmentables.kps import Keypoint, KeypointsOnImage
+import imgaug.augmenters as iaa
+import imageio
+from glob import glob
+import torchvision.transforms as T
 
 def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
     '''
@@ -327,4 +333,75 @@ def save_metric_json(thresholds, scores, metric_type):
     plt.axis([0, thresholds[-1], 0, 1])
     plt.grid()
     plt.savefig('visualization_result/metrics/'+ metric_type + '_graph.png')
+
+def image_keypoint_augmentation(image_path, keypoint):
+    # image and keypoint augmentation
+    # order: scale -> rotate -> translate_xy
+    coco_dir='annotation/coco/val2017'
+    coco_paths = sorted(glob(os.path.join(coco_dir, '*.jpg')))
+
+    image = imageio.imread(image_path)
+    height, width = image.shape[:2]
+    coco_image = imageio.imread(np.random.choice(coco_paths))
+    coco_image = ia.imresize_single_image(coco_image, (height, width))
+
+    kps_wh = np.array(keypoint)
+    kps = [Keypoint(x=kps_wh[i][0], y=kps_wh[i][1]) for i in range(len(kps_wh))]
+
+    kpsoi = KeypointsOnImage(kps, shape=(height, width))
+    kps_is_valid = False
+    while not kps_is_valid:
+        rot_angle = np.random.choice(np.arange(-90, 90, 1))
+        scale_val = np.random.choice(np.arange(0.8, 1.2, 0.2))
+        rotate = iaa.Affine(rotate=rot_angle)
+        scale = iaa.Affine(scale=scale_val)
+
+        image_aug, kpsoi_aug = scale(image=image, keypoints=kpsoi)
+        image_aug, kpsoi_aug = rotate(image=image_aug, keypoints=kpsoi_aug)
+        kps_x_min = np.min(kpsoi_aug.to_xy_array()[:,0])
+        kps_x_max = np.max(kpsoi_aug.to_xy_array()[:,0])
+        kps_y_min = np.min(kpsoi_aug.to_xy_array()[:,1])
+        kps_y_max = np.max(kpsoi_aug.to_xy_array()[:,1])
+        pixel_margin = 5
+        trans_x_min = int(-kps_x_min + pixel_margin)
+        trans_x_max = int(width - kps_x_max - pixel_margin)
+        trans_y_min = int(-kps_y_min + pixel_margin)
+        trans_y_max = int(height - kps_y_max - pixel_margin)
+        trans_x = np.random.choice(np.arange(trans_x_min, trans_x_max, 1))
+        trans_y = np.random.choice(np.arange(trans_y_min, trans_y_max, 1))
+        translate = iaa.Affine(translate_px={"x": trans_x, "y": trans_y})
+        image_aug, kpsoi_aug = translate(image=image_aug, keypoints=kpsoi_aug)
+        
+        kps_flag_buffer = []
+        for keypoint in kpsoi_aug:
+            if keypoint.x > 0 and keypoint.x < width:
+                if keypoint.y > 0 and keypoint.y < height:
+                    kps_flag_buffer.append(True)
+        if len(kps_flag_buffer) == len(kpsoi_aug):
+            kps_is_valid = True
+
+    image_aug[np.where(image_aug==0)] = coco_image[np.where(image_aug==0)]
+    hue_saturation = iaa.AddToHueAndSaturation((-50, 50))
+    image_aug = hue_saturation(image=image_aug)
+    image_transform = T.Compose([
+            # T.Resize(800),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+    image_aug = image_transform(image_aug)
+    rotation_scale_translate = (rot_angle, scale_val, trans_x, trans_y)
     
+    return image_aug, kpsoi_aug.to_xy_array(), rotation_scale_translate
+
+def augmentation_recovery(keypoint_aug, aug_param):
+    # Recover the augmented keypoint
+    # order: translate_xy -> rotate -> scale
+    rot_angle, scale_val, trans_x, trans_y = aug_param
+    translate_inv = iaa.Affine(translate_px={"x": -trans_x, "y": -trans_y})
+    rotate_inv = iaa.Affine(rotate=-rot_angle)
+    scale_inv = iaa.Affine(scale=1/scale_val)
+    kps_recovered = translate_inv(keypoints=keypoint_aug)
+    kps_recovered = rotate_inv(keypoints=kps_recovered)
+    kps_recovered = scale_inv(keypoints=kps_recovered)
+
+    return kps_recovered.to_xy_array()

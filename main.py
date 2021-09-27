@@ -46,6 +46,7 @@ def argparse_args():
   parser.add_argument('--num_epochs', default=100, type=int, help="The number of epochs to run")
   parser.add_argument('--batch_size', default=1, type=int, help="The number of batchs for each epoch")
   parser.add_argument('--digital_twin', default=False, type=str2bool, help="True: run digital twin simulation on testing")
+  parser.add_argument('--aug', default=True, type=str2bool, help="True: image and keypoint augmentation")
   parser.add_argument('--resume', default=False, type=str2bool, help="True: Load the trained model and resume training")  
   
   return parser.parse_args()
@@ -60,8 +61,8 @@ def train(args, model, dataset_iterator, device, optimizer, digital_twin):
     num_trained_data = 0    
 
     for iter, sampled_batch in enumerate(tqdm(dataset_iterator, desc=f"Training with batch size ({args.batch_size})")):
-        image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
-        image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
+        image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
+        image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
         gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
         gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
         keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
@@ -70,8 +71,8 @@ def train(args, model, dataset_iterator, device, optimizer, digital_twin):
         keypoints_GT_2 = [[keypoints_GT_2[i][0].item(), keypoints_GT_2[i][1].item()] for i in range(len(keypoints_GT_2))]
         
         if iter == 0:
-            pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1).to(device) # [N, 9, 480, 640]
-            pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2).to(device) # [N, 9, 480, 640]
+            pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1) # [N, 9, 480, 640]
+            pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2) # [N, 9, 480, 640]
         
         image_beliefmap_stack_1 = torch.cat((image_1, pred_belief_maps_1), dim=1) # [N, 9, 480, 640]
         image_beliefmap_stack_2 = torch.cat((image_2, pred_belief_maps_2), dim=1) # [N, 9, 480, 640]
@@ -95,8 +96,8 @@ def train(args, model, dataset_iterator, device, optimizer, digital_twin):
                                         extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().detach().numpy()), 
                                         sampled_batch
                                         )
-            pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
-            pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0).to(device)
+            pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0)
+            pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0)
         else:
             pred_belief_maps_1 = output['pred_belief_maps'][0].unsqueeze(0).detach()
             pred_belief_maps_2 = output['pred_belief_maps'][1].unsqueeze(0).detach()
@@ -255,7 +256,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     train_dataset = RobotDataset(data_dir='annotation/real/validation')
-    test_dataset = RobotDataset(data_dir='annotation/real/test')
+    test_dataset = RobotDataset(data_dir='annotation/real/test_temp')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 

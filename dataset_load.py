@@ -5,7 +5,6 @@ import os
 import cv2
 import torch
 from torch.utils.data import Dataset
-
 from PIL import Image
 import torchvision.transforms as T
 from utils.gaussian_position_encoding import gaussian_state_embedding, positional_encoding
@@ -41,12 +40,11 @@ class RobotDataset(Dataset):
         with open(self.label_paths_2[idx]) as json_file:
             label_2 = json.load(json_file)
         joint_angles = np.array(label_1['object']['joint_angles'])
-        projected_keypoints_wh_1 = label_1['object']['joint_keypoints'] #[6, 2(w,h)]
-        projected_keypoints_wh_2 = label_2['object']['joint_keypoints'] #[6, 2(w,h)]
-
-        belief_maps_1 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
-        belief_maps_2 = torch.tensor(create_belief_map((h, w), projected_keypoints_wh_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
-        
+        keypoint_1 = label_1['object']['joint_keypoints'] #[6, 2(w,h)]
+        keypoint_2 = label_2['object']['joint_keypoints'] #[6, 2(w,h)]
+        belief_maps_1 = torch.tensor(create_belief_map((h, w), keypoint_1, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
+        belief_maps_2 = torch.tensor(create_belief_map((h, w), keypoint_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
+                
         # stacked_image_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, 800, 800]
         # stacked_image_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, 800, 800]
         cam_K_1  = np.array(label_1['camera']['camera_intrinsic'])
@@ -66,8 +64,8 @@ class RobotDataset(Dataset):
             # 'belief_maps_noise_1': belief_maps_noise_1, # [6, 480, 640]
             'belief_maps_2': belief_maps_2,  # [6, 480, 640]
             # 'belief_maps_noise_2': belief_maps_noise_2, # [6, 480, 640]
-            'keypoints_GT_1': projected_keypoints_wh_1,  # [6, 2(w,h)]
-            'keypoints_GT_2': projected_keypoints_wh_2,  # [6, 2(w,h)]
+            'keypoints_GT_1': keypoint_1,  # [6, 2(w,h)]
+            'keypoints_GT_2': keypoint_2,  # [6, 2(w,h)]
             # 'state_embeddings': state_embeddings.flatten(1),
             'image_path_1': image_path_1,
             'image_path_2': image_path_2,
@@ -82,3 +80,7 @@ class RobotDataset(Dataset):
             'distortion_2': distortion_2,
             }
         return sample
+
+    
+
+    

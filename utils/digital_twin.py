@@ -91,7 +91,7 @@ class DigitalTwin():
         target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]
         target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # flatten to [12,]
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
-
+        
         # update camera parameters
         self.cam_K_1 = sampled_batch['cam_K_1'][0].numpy()
         self.cam_K_2 = sampled_batch['cam_K_2'][0].numpy()
@@ -177,7 +177,6 @@ class DigitalTwin():
                 keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
                 keypoints_eps = np.vstack((keypoints_eps_1, keypoints_eps_2)).reshape(-1) # [24]
                 Jacobian[:,col] = (keypoints_eps - keypoints)/eps
-            
             dy = np.array(target_keypoints - keypoints)
             dx = np.linalg.pinv(Jacobian)@dy
             jointAngles_jpnp += dx # all joint angle update

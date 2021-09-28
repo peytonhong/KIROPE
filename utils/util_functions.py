@@ -344,6 +344,8 @@ def image_keypoint_augmentation(image_path, keypoint):
     height, width = image.shape[:2]
     coco_image = imageio.imread(np.random.choice(coco_paths))
     coco_image = ia.imresize_single_image(coco_image, (height, width))
+    if len(coco_image.shape) == 2:
+        coco_image = cv2.cvtColor(coco_image, cv2.COLOR_GRAY2BGR)
 
     kps_wh = np.array(keypoint)
     kps = [Keypoint(x=kps_wh[i][0], y=kps_wh[i][1]) for i in range(len(kps_wh))]

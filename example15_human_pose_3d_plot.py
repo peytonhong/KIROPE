@@ -9,6 +9,10 @@ import cv2
 data_path = 'annotation/real/test/20210819_025345_human/'
 human_pose_path = os.path.join(data_path, 'human_pose')
 human_pose_json_path = sorted(glob(os.path.join(human_pose_path, '*.json')))
+cam1_path = data_path + 'cam1'
+cam2_path = data_path + 'cam2'
+cam1_image_path = sorted(glob(os.path.join(cam1_path, '*.jpg')))
+cam2_image_path = sorted(glob(os.path.join(cam2_path, '*.jpg')))
 joint_interest = [0,1,2,5,6,7,8,9,10,11,12,13] 
 # [nose, L-eye, R-eye, 
 # L-shoulder, R-shoulder, 
@@ -27,9 +31,19 @@ ax = fig.add_subplot(111, projection='3d')
 for frame_i, human_pose_json_path in enumerate(human_pose_json_path):
     with open(human_pose_json_path, 'r') as json_file:
         human_pose_json = json.load(json_file)
+        
     joint_keypoints_1 = human_pose_json['joint_keypoints_1']
     joint_keypoints_2 = human_pose_json['joint_keypoints_2']
     joint_3d_positions = human_pose_json['joint_3d_positions']
+
+    # draw keypoint on images
+    image_1 = cv2.imread(cam1_image_path[frame_i])
+    image_2 = cv2.imread(cam2_image_path[frame_i])
+    for kps1, kps2 in zip(joint_keypoints_1, joint_keypoints_2):
+        kps1 = np.array(kps1)
+        kps2 = np.array(kps2)
+        cv2.circle(image_1, (int(kps1[0]), int(kps1[1])), radius=2, color=(0,255,0), thickness=2)
+        cv2.circle(image_2, (int(kps2[0]), int(kps2[1])), radius=2, color=(0,255,0), thickness=2)
 
     # add neck position (center of shoulders)
     neck_x = (joint_3d_positions[3][0] + joint_3d_positions[4][0])/2
@@ -52,8 +66,12 @@ for frame_i, human_pose_json_path in enumerate(human_pose_json_path):
     plt.ylabel('Y')
     plt.title('frame: {}'.format(frame_i))
     # plt.show()
+    fig.canvas.draw()
+    image_3d = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    image_3d = image_3d.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    image_total = np.hstack((image_2, image_3d, image_1))
+    cv2.imwrite(f'visualization_result/human_pose_result/image_human_3d_{frame_i:04d}.png', image_total)
     plt.pause(0.1)
     plt.cla()
-
-
+    
     # ret = cv2.waitKey()

@@ -256,7 +256,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     train_dataset = RobotDataset(data_dir='annotation/real/validation')
-    test_dataset = RobotDataset(data_dir='annotation/real/test')
+    test_dataset = RobotDataset(data_dir='annotation/real/test_temp')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 

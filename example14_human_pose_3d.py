@@ -140,11 +140,7 @@ def DLT(P1, P2, point1, point2):
     A = np.array(A).reshape((4,4))
     #print('A: ')
     #print(A)
- 
-    B = A.transpose() @ A
-    from scipy import linalg
-    U, s, Vh = linalg.svd(B, full_matrices = False)
- 
+    U, s, Vh = np.linalg.svd(A, full_matrices = False)
     # print('Triangulated point: ')
     # print(Vh[3,0:3]/Vh[3,3])
     return Vh[3,0:3]/Vh[3,3]

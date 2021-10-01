@@ -69,6 +69,7 @@ for frame_i, human_pose_json_path in enumerate(human_pose_json_path):
     fig.canvas.draw()
     image_3d = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     image_3d = image_3d.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    image_3d = cv2.cvtColor(image_3d, cv2.COLOR_BGR2RGB)
     image_total = np.hstack((image_2, image_3d, image_1))
     cv2.imwrite(f'visualization_result/human_pose_result/image_human_3d_{frame_i:04d}.png', image_total)
     plt.pause(0.1)

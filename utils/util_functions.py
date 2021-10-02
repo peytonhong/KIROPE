@@ -1,5 +1,7 @@
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
+import json
 
 def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
     '''
@@ -50,12 +52,14 @@ def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
 
 def extract_keypoints_from_belief_maps(belief_maps):
     keypoints = []
+    confidences = []
     for i in range(len(belief_maps)):
         indices = np.where(belief_maps[i] == belief_maps[i].max())
         keypoints.append([indices[1][0], indices[0][0]]) # keypoint format: [w, h]
+        confidences.append(belief_maps[i].max()) # confidence score between 0 to 1
         # print(belief_maps[0][i].max())
-        
-    return keypoints
+    
+    return (np.array(keypoints), np.array(confidences))
 
 def save_belief_map_images(belief_maps, map_type):
     # belief_maps: [numJoints, h, w]
@@ -145,4 +149,65 @@ def visualize_two_stacked_images(image_beliefmap_stack, image_path1, image_path2
     image2 = image2.astype(np.uint8)
     image_hstack = np.hstack((image1, image2))
     cv2.imwrite(f'visualization_result/image_beliefmap_stack/{image_path1[-8:]}', image_hstack)
-    # cv2.imwrite(f'visualization_result/image_beliefmap_stack/{image_path1[-8:]}', beliefmap1_single_channel)
+
+def visualize_single_stacked_images(image_beliefmap_stack, filenum):
+    image1 = (image_beliefmap_stack[:3].transpose([1,2,0])*255).astype(np.uint8)
+    beliefmap1 = (image_beliefmap_stack[3:9].transpose([1,2,0])*255).astype(np.uint8)  
+    image1 = cv2.cvtColor(image1, cv2.COLOR_RGB2BGR)
+    # image2 = cv2.cvtColor(image2, cv2.COLOR_RGB2BGR)    
+    height, width = image1.shape[:2]
+    beliefmap1_single_channel = np.zeros((height, width), dtype=np.int)
+    for i in range(beliefmap1.shape[-1]):
+        beliefmap1_single_channel += beliefmap1[:,:,i]
+    # merge beliefmap in red channel    
+    image1 = image1.astype(np.int)
+    image1[:,:,2] += beliefmap1_single_channel
+    image1[:,:,2][np.where(image1[:,:,2]>255)] = 255
+    image1 = image1.astype(np.uint8)
+    cv2.imwrite(f'visualization_result/image_beliefmap_stack/{filenum:04d}.jpg', image1)
+
+def get_pck_score(kps_pred, kps_gt, thresholds):    
+    # PCK: Percentage of Correct Keypoints with in threshold pixel
+    pck = []
+    pck_by_threshold = []
+    for threshold in thresholds:
+        for i in range(len(kps_gt)):
+            error_2d = np.linalg.norm(kps_pred[i] - kps_gt[i])
+            if error_2d < threshold:
+                pck.append(True)
+            else:
+                pck.append(False)
+        pck_by_threshold.append(np.mean(pck)) # percentage of Trues.
+    return np.array(pck_by_threshold)
+
+def get_add_score(pos_pred, pos_gt, thresholds):
+    add = []
+    add_by_threshold = []
+    for threshold in thresholds:
+        for i in range(len(pos_gt)):
+            error_3d = np.linalg.norm(pos_pred[i] - pos_gt[i])
+            if error_3d < threshold:
+                add.append(True)
+            else:
+                add.append(False)    
+        add_by_threshold.append(np.mean(add))
+    return np.array(add_by_threshold)
+
+def save_metric_json(thresholds, scores, metric_type):
+    thresholds = np.array(thresholds)
+    scores = np.array(scores)
+    if metric_type == "PCK":
+        unit = '[pixels]'
+    elif metric_type == "ADD":
+        unit = '[mm]'
+        thresholds *= 1000 # unit [mm]
+    output = np.vstack((thresholds, scores))
+    with open('visualization_result/metrics/'+ metric_type + '_result.json', 'w') as json_file:
+        json.dump(output.tolist(), json_file)
+    plt.clf()
+    plt.plot(thresholds, scores)
+    plt.xlabel('threshold distance '+ unit)
+    plt.ylabel(metric_type)
+    plt.axis([0, thresholds[-1], 0, 1])
+    plt.grid()
+    plt.savefig('visualization_result/metrics/'+ metric_type + '_graph.png')

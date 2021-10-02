@@ -16,14 +16,15 @@ import argparse
 import numpy as np
 import cv2
 import subprocess 
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from dataset_load import RobotDataset
 from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple, UNet
 from utils.digital_twin import DigitalTwin
 from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
-from utils.util_functions import visualize_result_two_cams, visualize_two_stacked_images
-
+from utils.util_functions import visualize_result_two_cams, visualize_two_stacked_images, visualize_single_stacked_images
+from utils.util_functions import get_pck_score, get_add_score, save_metric_json
+from glob import glob
 def str2bool(v):
     # Converts True or False for argparse
     if isinstance(v, bool):
@@ -65,8 +66,8 @@ def train(args, model, dataset_iterator, device, optimizer):
         # gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
         
         image = sampled_batch['img_belief_all'] # [N, 9, h, w]
-        gt_belief_maps = sampled_batch['belief_maps_all'] # [N, 6, h , w]
-        
+        gt_belief_maps = sampled_batch['belief_maps_all'] # [N, 6, h , w]        
+        # visualize_single_stacked_images(image[0].numpy(), iter)
         image, gt_belief_maps = image.to(device), gt_belief_maps.to(device)
         optimizer.zero_grad()
         output = model(image) # ResNet model
@@ -93,6 +94,14 @@ def test(args, model, dataset, device, digital_twin):
 
     test_loss_sum = 0
     num_tested_data = 0
+    pck_scores = []
+    add_scores = []
+    pck_thresholds = np.linspace(0, 20, 50) # thresholds to evaluate [pixel]
+    add_thresholds = np.linspace(0, 0.100, 50) # thresholds to evaluate [m]
+
+    files = glob('visualization_result/*.jpg')
+    for f in files:
+        os.remove(f)
     
     with torch.no_grad():
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({1})")):
@@ -129,26 +138,40 @@ def test(args, model, dataset, device, digital_twin):
                                 keypoints_GT_2[0],
                                 is_kp_normalized=False
                                 )
+                add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)
+                add_scores.append(add_score)
             else:
                 # pred_belief_maps_1 = output['pred_belief_maps'][0][:6].unsqueeze(0).detach()
                 # pred_belief_maps_2 = output['pred_belief_maps'][0][6:].unsqueeze(0).detach()
+                pred_kps_1, confidences_1 = extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy())
+                pred_kps_2, confidences_2 = extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy())                
                 visualize_result_two_cams(
                                 sampled_batch['image_path_1'][0],
-                                extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy()),
+                                pred_kps_1,
                                 keypoints_GT_1[0],
                                 sampled_batch['image_path_2'][0],
-                                extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().numpy()),
+                                pred_kps_2,
                                 keypoints_GT_2[0],
                                 is_kp_normalized=False
                                 )
+            
+            pck_score = get_pck_score(pred_kps_1, keypoints_GT_1[0].numpy(), pck_thresholds)
+            pck_scores.append(pck_score)
             if iter%100 == 0:
+            # if iter == 150:
                 save_belief_map_images(output['pred_belief_maps'][0][:6].cpu().detach().numpy(), 'test_cam1')
+                # exit()
             # if iter == 618:
             #     break
-
+        
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data
+        pck_scores = np.mean(pck_scores, axis=0)        
+        save_metric_json(pck_thresholds, pck_scores, 'PCK')
+        if args.digital_twin:
+            add_scores = np.mean(add_scores, axis=0)
+            save_metric_json(add_thresholds, add_scores, 'ADD')
 
     return test_loss_sum
 
@@ -193,8 +216,8 @@ def main(args):
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=True)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
     
-    # DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf")
-    DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo.urdf")
+    # DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
+    DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
 
     if args.command == 'train':
         # CHECKPOINT_DIR
@@ -205,7 +228,8 @@ def main(args):
             pass
 
         best_test_loss = float('inf')
-        
+        train_loss_buffer = []
+        test_loss_buffer = []
         for e in range(args.num_epochs):
             train_loss = train(args, model, train_iterator, device, optimizer)           
             test_loss = test(args, model, test_iterator, device, DT_test) # include visulaization result checking
@@ -218,6 +242,17 @@ def main(args):
             torch.save(model, model_path_train)
             # DT_train.zero_joint_state()
             DT_test.zero_joint_state()
+            
+            train_loss_buffer.append(train_loss)
+            test_loss_buffer.append(test_loss)
+            plt.plot(train_loss_buffer, label='train loss')
+            plt.plot(test_loss_buffer, label='test loss')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.savefig('loss_graph.png')
+            plt.clf()
+
 
     else: # evaluate mode        
         model = torch.load(model_path)

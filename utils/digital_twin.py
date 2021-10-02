@@ -29,6 +29,7 @@ class DigitalTwin():
         self.cam_RT_2 = None
         self.distortion_1 = None
         self.dotortion_2 = None
+        self.fov = 43*np.pi/180 # Intel Realsense L515
 
         # Setup bullet physics stuff
         self.seconds_per_step = 1.0 / 240.0
@@ -57,15 +58,21 @@ class DigitalTwin():
         self.jointAngles_main = np.zeros(self.numJoints) # main robot
         self.jointAngles_jpnp = np.zeros(self.numJoints) # Joint PnP robot
         self.jointVelocities_main = np.zeros(self.numJoints)
-
+        self.jointAngles_jpnp_old = np.zeros(self.numJoints)
+        self.keypoints_1 = np.zeros((self.numJoints, 2))
+        self.keypoints_2 = np.zeros((self.numJoints, 2))
+        self.jointWorldPosition_pred = np.zeros((self.numJoints, 3))
+        self.jointWorldPosition_gt = np.zeros((self.numJoints, 3))
+        
         # Kalman filter variables
         nj = self.numJoints  # exclude end-effector
-        self.dT = 1/self.frames_per_second
+        # self.dT = 1/self.frames_per_second
+        self.dT = 0.1
         self.A = np.vstack( (np.hstack((np.eye(nj), np.eye(nj)*self.dT)), 
                             np.hstack((np.zeros((nj,nj)), np.eye(nj))))) # [2*numJoints, 2*numJoints]
         self.P = np.eye(2*nj)
-        Q_upper = np.eye(nj)*0.1     # angle noise
-        Q_lower = np.eye(nj)*0.0001 # angular velocity noise
+        Q_upper = np.eye(nj)#*0.1     # angle noise
+        Q_lower = np.eye(nj)#*0.0001 # angular velocity noise
         self.Q = np.vstack( (np.hstack((Q_upper, np.zeros((nj,nj)))), 
                             np.hstack((np.zeros((nj,nj)), Q_lower)))) # [2*numJoints, 2*numJoints]
         self.R = np.eye(nj)
@@ -73,25 +80,39 @@ class DigitalTwin():
         self.X = np.zeros((2*nj, 1)) #[2*numJoints, 1]
         self.H = np.hstack((np.eye(nj), np.zeros((nj,nj)))) # [numJoints, 2*numJoints]
 
-        self.jpnp_max_iterations = 100
+        self.jpnp_max_iterations = 30
 
         with open('./utils/dt_debug.csv', 'w', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
-            writer.writerow(['iter', 'angle_error', 'joint_angles_gt', 'jointAngle_command', 'self.jointAngles_main' , 'jointAngles_jpnp'])
+            writer.writerow(['iter', 'angle_cos_error', 
+                        'angle_gt_1','angle_gt_2','angle_gt_3','angle_gt_4','angle_gt_5', 'angle_gt_6', 
+                        'angle_cmd_1', 'angle_cmd_2', 'angle_cmd_3', 'angle_cmd_4', 'angle_cmd_5', 'angle_cmd_6', 
+                        'angle_main_1', 'angle_main_2', 'angle_main_3', 'angle_main_4', 'angle_main_5', 'angle_main_6', 
+                        'angle_jpnp_1', 'angle_jpnp_2', 'angle_jpnp_3', 'angle_jpnp_4', 'angle_jpnp_5', 'angle_jpnp_6', 
+                        ])
 
 
-    def forward(self, target_keypoints_1, target_keypoints_2, sampled_batch):
+    def forward(self, target_keypoints_and_confidences_1, target_keypoints_and_confidences_2, sampled_batch):
 
         # J-PnP -> Kalman Filter -> main simulation update -> find new keypoint
         
+        target_keypoints_1, confidences_1 = target_keypoints_and_confidences_1 # tuple
+        target_keypoints_2, confidences_2 = target_keypoints_and_confidences_2 # tuple
         # target_keypoints_1 = target_keypoints_1*[self.width, self.height] # expand keypoint range to full width, height
         # target_keypoints_2 = target_keypoints_2*[self.width, self.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
-        self.jointAngles_jpnp = self.jointAngles_main
+        # self.jointAngles_jpnp = self.jointAngles_main
+        for i in range(self.numJoints):
+            # if confidence score of a keypoint is below threshold, load previously estimated keypoint.
+            if confidences_1[i] < 0.9:
+                target_keypoints_1[i] = self.keypoints_1[i]
+            if confidences_2[i] < 0.9: 
+                target_keypoints_2[i] = self.keypoints_2[i]
+        
         target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]
         target_keypoints_2 = [target_keypoints_2[i][j] for i in range(len(target_keypoints_2)) for j in range(2)]  # flatten to [12,]
         target_keypoints = np.array(target_keypoints_1 + target_keypoints_2) # [24,]
-        
+
         # update camera parameters
         self.cam_K_1 = sampled_batch['cam_K_1'][0].numpy()
         self.cam_K_2 = sampled_batch['cam_K_2'][0].numpy()
@@ -102,45 +123,47 @@ class DigitalTwin():
         joint_angles_gt = sampled_batch['joint_angles'][0].numpy()
 
         # Joint PnP
-        self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
-        # self.jointAngles_jpnp, angle_error, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
+        self.jointAngles_jpnp_old = self.jointAngles_jpnp
+        self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
+        # self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
         self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
-
-        # Kalman filter        
-        self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
-        # if angle_error < 5.:
-        #     self.R = np.eye(self.numJoints)*0.0001
-        # else:
-        #     self.R = np.eye(self.numJoints)*1 # invalid measurement
-        # self.R = np.eye(self.numJoints)*100000
-        # Update Kalman filter for self.jointAngles_main
+        
+        self.jointAngles_jpnp = self.regulate_angle(self.jointAngles_jpnp, self.jointAngles_jpnp_old)
+        
+        angle_cos_error = np.linalg.norm(np.cos(self.jointAngles_jpnp) - np.cos(self.jointAngles_jpnp_old))
+        # Kalman filter                
+        # self.jointAngles_main = self.jointAngles_jpnp # valid measurement value with less than criteria    
+        
         K = self.P @ np.transpose(self.H) @ np.linalg.inv(self.H @ self.P @ np.transpose(self.H) + self.R)
-        
-        self.X = self.X + K @ (self.jointAngles_main.reshape(-1,1) - self.H @ self.X)
-        
+        if angle_cos_error > 3*np.pi/180:
+            K = np.zeros_like(K)
+            self.X[self.numJoints:] = 0 # zero velocity
+        self.X = self.X + K @ (self.jointAngles_jpnp.reshape(-1,1) - self.H @ self.X)
         self.P = (np.eye(2*self.numJoints) - K @ self.H) @ self.P
         # filtered joint angle
-        self.jointAngles_main = self.X[:self.numJoints].reshape(-1)
-        self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
         self.X = self.A @ self.X
         self.P = self.A @ self.P @ np.transpose(self.A) + self.Q
+        self.jointAngles_main = self.X[:self.numJoints].reshape(-1)
+        self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
+        # print(KF, self.jointAngles_jpnp[4]*180/np.pi, self.X[4]*180/np.pi)    
         
         jointAngle_command = self.jointAngles_main
         
         # PyBullet main simulation update
-        steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame
+        # steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame
+        steps_per_frame = 1
         for _ in range(steps_per_frame):
             for j in range(self.numJoints - 1):
                 p.setJointMotorControl2(bodyIndex=self.robotId_main,
                                         jointIndex=j,
                                         controlMode=p.POSITION_CONTROL,
-                                        targetPosition=self.jointAngles_main[j],             # 여기 main으로 바꿔놔야 함 (KF작동조건은main)
+                                        targetPosition=jointAngle_command[j],             # 여기 main으로 바꿔놔야 함 (KF작동조건은main)
                                         targetVelocity=self.jointVelocities_main[j],
                                         # targetPosition=joint_angles_gt[j],
                                         # targetVelocity=0,
-                                        force=1000,
-                                        positionGain=0.1,
-                                        velocityGain=0.1,
+                                        force=500,
+                                        positionGain=0.5,
+                                        velocityGain=0.5,
                                         physicsClientId=self.physicsClient_main
                                         )
             p.stepSimulation(physicsClientId=self.physicsClient_main)
@@ -149,34 +172,37 @@ class DigitalTwin():
         jointStates = p.getJointStates(self.robotId_main, range(self.numJoints), physicsClientId=self.physicsClient_main)
         self.jointAngles_main = np.array([jointStates[i][0] for i in range(len(jointStates))])
 
-        keypoints_1 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-        keypoints_2 = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+        self.keypoints_1, _ = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        self.keypoints_2, _ = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_main, self.physicsClient_main, self.cam_K_2, self.cam_RT_2, self.distortion_2)
         # keypoints = self.get_joint_keypoints_from_angles(self.jointAngles_jpnp, self.robotId_main, self.physicsClient_main, cam_K_1, cam_RT_1)        
         # keypoints /= [self.width, self.height] # normalize
 
-        self.save_debug_file([iter, angle_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
+        self.save_debug_file([iter, angle_cos_error, joint_angles_gt, jointAngle_command, self.jointAngles_main, self.jointAngles_jpnp])
 
-        return keypoints_1, keypoints_2
+        _, self.jointWorldPosition_pred = self.get_joint_keypoints_from_angles(self.jointAngles_main, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        _, self.jointWorldPosition_gt = self.get_joint_keypoints_from_angles(joint_angles_gt, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+        
+        return self.keypoints_1, self.keypoints_2
 
     def joint_pnp(self, target_keypoints, jointAngles_jpnp):
         jointAngles_init = jointAngles_jpnp.copy()
         eps = 1e-6
         # eps = np.linspace(1e-6, 1e-6, self.numJoints)
-        iterations = 100 # This value can be adjusted.
-        for iter in range(iterations): #self.jpnp_max_iterations
+        for iter in range(self.jpnp_max_iterations): #self.jpnp_max_iterations
             # get joint 2d keypoint from 3d points and camera model
-            keypoints_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-            keypoints_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+            keypoints_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+            keypoints_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
             keypoints = np.vstack((keypoints_1, keypoints_2)).reshape(-1) # [24]
             # Jacobian approximation: keypoint rate (변화량)
             Jacobian = np.zeros((self.numJoints*2*2, self.numJoints)) # [24, 6]
             for col in range(self.numJoints):
                 eps_array = np.zeros(self.numJoints)
                 eps_array[col] = eps
-                keypoints_eps_1 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
-                keypoints_eps_2 = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+                keypoints_eps_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+                keypoints_eps_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
                 keypoints_eps = np.vstack((keypoints_eps_1, keypoints_eps_2)).reshape(-1) # [24]
                 Jacobian[:,col] = (keypoints_eps - keypoints)/eps
+            
             dy = np.array(target_keypoints - keypoints)
             dx = np.linalg.pinv(Jacobian)@dy
             jointAngles_jpnp += dx # all joint angle update
@@ -188,12 +214,8 @@ class DigitalTwin():
             #     eps *= 0.99
             if criteria < 1e-3:
                 break
-        # angle_error = np.linalg.norm(jointAngles_init[:-1]*180/np.pi - jointAngles_jpnp[:-1]*180/np.pi)/self.numJoints
-        angle_error = np.linalg.norm(np.sin(jointAngles_init[:-1]) - np.sin(jointAngles_jpnp[:-1]))/(self.numJoints-1)
-        angle_error = np.arcsin(angle_error)*180/np.pi
-        # print('angle_error: ', angle_error)
         # print(jointAngles_jpnp*180/np.pi)
-        return jointAngles_jpnp, angle_error, iter
+        return jointAngles_jpnp, iter
 
 
     # def joint_pnp_with_LM(self, target_keypoints, jointAngles_jpnp):
@@ -241,8 +263,8 @@ class DigitalTwin():
     #             #     eps *= 0.9
     #             if criteria < 1e-3:
     #                 break
-    #         angle_error = ((jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)**2).mean()
-    #         if angle_error < 1.:             
+    #         angle_cos_error = ((jointAngles_init*180/np.pi - jointAngles_jpnp*180/np.pi)**2).mean()
+    #         if angle_cos_error < 1.:             
     #             break
         
                 
@@ -250,18 +272,36 @@ class DigitalTwin():
     #     if self.save_images:
     #         self.save_result_image(jointAngles_jpnp, target_keypoints)
         
-    #     return jointAngles_jpnp, angle_error, retry, iter
+    #     return jointAngles_jpnp, angle_cos_error, retry, iter
+
+    def regulate_angle(self, angles_new, angles_old):
+        # modify new angles to have near value of old angles
+        # example: 179.41(old) -> -179.67(new) -> 180.32(modified)
+        
+        # print(angles_old[4]*180/np.pi, angles_new[4]*180/np.pi)
+        angle_old_regulated = np.mod(angles_old + np.pi, 2*np.pi) - np.pi        
+        for i in range(len(angles_new)):
+            if (angles_new[i] - angle_old_regulated[i]) < -np.pi:
+                diff = (angles_new[i] - angle_old_regulated[i]) + 2*np.pi
+            elif (angles_new[i] - angle_old_regulated[i]) > np.pi:
+                diff = (angles_new[i] - angle_old_regulated[i]) - 2*np.pi
+            else:
+                diff = (angles_new[i] - angle_old_regulated[i])            
+            angles_new[i] = angles_old[i] + diff
+        # print(angles_new[4]*180/np.pi)
+
+        return angles_new
 
     def angle_wrapper(self, angles):
         # wrapping angles to have vales between [-pi, pi)
         return np.arctan2(np.sin(angles), np.cos(angles))
 
     def save_debug_file(self, data):
-        iter, angle_error, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
+        iter, angle_cos_error, joint_angles_gt, jointAngle_command, jointAngles_main, jointAngles_jpnp = data
         with open('./utils/dt_debug.csv', 'a', newline='') as  f: 
             writer = csv.writer(f, delimiter=',')
             message = np.hstack((iter, 
-                                angle_error, 
+                                angle_cos_error, 
                                 np.array(joint_angles_gt).reshape(-1), 
                                 np.array(jointAngle_command).reshape(-1), 
                                 np.array(jointAngles_main).reshape(-1), 
@@ -295,9 +335,10 @@ class DigitalTwin():
                 rot_world = link_state[1]
             else: # link
                 link_state = p.getLinkState(bodyUniqueId=bodyUniqueId, linkIndex=link_num-1, physicsClientId=physicsClientId)
-                pos_world = self.add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
+                # pos_world = self.add_tuple(link_state[4], (0, 0, 0.1)) # world position of the URDF link frame
+                pos_world = link_state[4]
                 rot_world = link_state[5] # world orientation of the URDF link frame
-            link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [8, 2]
+                link_world_state.append([pos_world, rot_world])   # (link position is identical to joint position) [numJoints, 2]
         return np.array(link_world_state)
 
     def get_joint_keypoints_from_angles(self, jointAngles, bodyUniqueId, physicsClientId, cam_K, cam_RT, distortion):
@@ -352,7 +393,7 @@ class DigitalTwin():
         rvecs = cv2.Rodrigues(cam_RT[:,:-1])[0]
         tvecs = cam_RT[:,-1]
         keypoints, jacobian = cv2.projectPoints(joint_world_position, rvecs, tvecs, cam_K, distortion)
-        return keypoints.squeeze() # [numJoints, 2]
+        return keypoints.squeeze(), joint_world_position # [numJoints, 2], [numJoints, 3]
 
 
     def clamping(self, min, val, max):

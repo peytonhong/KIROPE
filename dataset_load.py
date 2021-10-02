@@ -27,12 +27,12 @@ class RobotDataset(Dataset):
         self.image_transform = T.Compose([
             # T.Resize(800),
             T.ToTensor(),
-            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            # T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
         coco_dir = 'annotation/coco/val2017'
         self.coco_paths = sorted(glob(os.path.join(coco_dir, '*.jpg')))
         self.augmentation = augmentation
-        self.aug_rate = 0.7 # 70%
+        self.aug_rate = 0.5 # 50%
 
     def __len__(self):
         return len(self.image_paths_1)
@@ -68,12 +68,13 @@ class RobotDataset(Dataset):
         belief_maps_2 = torch.tensor(create_belief_map((h, w), keypoints_2, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
         belief_maps_all = torch.tensor(create_belief_map((h, w), keypoints_all, noise_std=0)).type(torch.FloatTensor) # [6, h,w]
         
-        # belief_maps_1_noise = torch.tensor(create_belief_map((h, w), keypoints_1, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
-        # belief_maps_2_noise = torch.tensor(create_belief_map((h, w), keypoints_2, sigma=10, noise_std=2)).type(torch.FloatTensor) # [6, h,w]
+        # belief_maps_1_noise = torch.tensor(create_belief_map((h, w), keypoints_1, sigma=10, noise_std=10)).type(torch.FloatTensor) # [6, h,w]
+        # belief_maps_2_noise = torch.tensor(create_belief_map((h, w), keypoints_2, sigma=10, noise_std=10)).type(torch.FloatTensor) # [6, h,w]
+        belief_maps_all_noise = torch.tensor(create_belief_map((h, w), keypoints_all, sigma=10, noise_std=10)).type(torch.FloatTensor) # [6, h,w]
         img_belief_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, h, w]
         img_belief_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, h, w]
         # img_belief_stack = torch.cat((img_belief_1, img_belief_2), dim=0) # [18, h, w]
-        img_belief_all = torch.cat((image_all, belief_maps_all), dim=0) # [9, h, w]
+        img_belief_all = torch.cat((image_all, belief_maps_all_noise), dim=0) # [9, h, w]
         # stacked_image_1 = torch.cat((image_1, belief_maps_1), dim=0) # [9, 800, 800]
         # stacked_image_2 = torch.cat((image_2, belief_maps_2), dim=0) # [9, 800, 800]
         # stacked_image = torch.cat((image_1, image_2), dim=0) # [6, h, w]
@@ -128,6 +129,8 @@ class RobotDataset(Dataset):
         height, width = image.shape[:2]
         coco_image = imageio.imread(np.random.choice(self.coco_paths))
         coco_image = ia.imresize_single_image(coco_image, (height, width))
+        if len(coco_image.shape) == 2:
+            coco_image = cv2.cvtColor(coco_image, cv2.COLOR_GRAY2BGR)
 
         kps_wh = np.array(keypoint)
         kps = [Keypoint(x=kps_wh[i][0], y=kps_wh[i][1]) for i in range(len(kps_wh))]

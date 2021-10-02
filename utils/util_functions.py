@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import json
+import os
+import pybullet as p
 
 def create_belief_map(image_resolution, keypoints, sigma=4, noise_std=0):
     '''
@@ -165,6 +167,205 @@ def visualize_single_stacked_images(image_beliefmap_stack, filenum):
     image1[:,:,2][np.where(image1[:,:,2]>255)] = 255
     image1 = image1.astype(np.uint8)
     cv2.imwrite(f'visualization_result/image_beliefmap_stack/{filenum:04d}.jpg', image1)
+
+def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_keypoints_1, 
+                            image_path_2, pred_keypoints_2, gt_keypoints_2, 
+                            digital_twin,
+                            cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
+                            is_kp_normalized):
+    # visualize the joint position prediction wih ground truth for one sample
+    # pred_kps, gt_kps: [numJoints, 2(w,h order)]
+    rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
+    bgr_colors = rgb_colors[:, ::-1].tolist()
+    image_1 = cv2.imread(image_path_1)
+    image_2 = cv2.imread(image_path_2)
+    height, width, channel = image_1.shape
+    if is_kp_normalized:
+        pred_keypoints_1 = [[int(u*width), int(v*height)] for u, v in pred_keypoints_1]
+        gt_keypoints_1 = [[int(u*width), int(v*height)] for u, v in gt_keypoints_1]
+        pred_keypoints_2 = [[int(u*width), int(v*height)] for u, v in pred_keypoints_2]
+        gt_keypoints_2 = [[int(u*width), int(v*height)] for u, v in gt_keypoints_2]
+    image_1 = image_1.copy()
+    image_2 = image_2.copy()
+    
+    for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints_1, gt_keypoints_1)):
+        cv2.drawMarker(image_1, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i], markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=2)
+        cv2.circle(image_1, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i], thickness=2)        
+        # draw_lines_robot(image_1, pred_keypoints_1, bgr_colors)
+    for i, (pred_keypoint, gt_keypoint) in enumerate(zip(pred_keypoints_2, gt_keypoints_2)):
+        cv2.drawMarker(image_2, (int(pred_keypoint[0]), int(pred_keypoint[1])), color=bgr_colors[i], markerType=cv2.MARKER_CROSS, markerSize = 10, thickness=2)
+        cv2.circle(image_2, (int(gt_keypoint[0]), int(gt_keypoint[1])), radius=5, color=bgr_colors[i], thickness=2) 
+        # draw_lines_robot(image_2, pred_keypoints_2, bgr_colors)
+    
+    robot_pos_3d = digital_twin.jointWorldPosition_pred
+    
+    # draw human pose skeleton lines if it exists
+    folder, file_name = os.path.split(image_path_1)
+    parent_folder, cam_foler = os.path.split(folder)
+    file_name = file_name[:4] + '.json'
+    human_pose_path = os.path.join(parent_folder, 'human_pose', file_name)
+    collision_index = np.array([[],[]])
+    if os.path.exists(human_pose_path):
+        with open(human_pose_path, 'r') as json_file:
+            human_pos_json = json.load(json_file)
+        human_pos_3d = np.array(human_pos_json['joint_3d_positions'])
+        collision_index = get_collision_index(robot_pos_3d, human_pos_3d, threshold=0.3)
+        draw_lines_human(image_1, human_pos_3d, cam_K_1, cam_RT_1, collision_index)
+        draw_lines_human(image_2, human_pos_3d, cam_K_2, cam_RT_2, collision_index)
+    else:
+        human_pos_3d = None
+    draw_lines_robot(image_1, robot_pos_3d, cam_K_1, cam_RT_1, collision_index)
+    draw_lines_robot(image_2, robot_pos_3d, cam_K_2, cam_RT_2, collision_index)
+    
+    image_3d = draw_3d_lines(robot_pos_3d, human_pos_3d, int(image_path_1[-8:-4]))
+
+    image_stack = np.hstack((image_2, image_3d, image_1))
+    cv2.putText(image_stack, 'CAM1', (width*2+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
+    cv2.putText(image_stack, 'CAM2', (10,30),       fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
+    cv2.imwrite(f'visualization_result/stacked_{image_path_1[-8:]}', image_stack)
+    
+    # get_robot_image(digital_twin, cam_K_2, cam_RT_2)
+    
+def draw_3d_lines(robot_pos, human_pos, num_str):
+    robot_joint_connections = [[0,1],[1,2],[2,3],[3,4],[4,5]]
+    human_joint_connections = [[0,1], [0,2], [0,11], [11,3], [11,4], [3,5], [4,6], [5,7], [6,8], [3,9], [4,10], [9,10]]
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    p3ds = robot_pos    
+    for _c in robot_joint_connections:
+        ax.plot(xs = [p3ds[_c[0]][0], p3ds[_c[1]][0]], 
+                ys = [p3ds[_c[0]][1], p3ds[_c[1]][1]], 
+                zs = [p3ds[_c[0]][2], p3ds[_c[1]][2]], 
+                c = 'green')
+    if human_pos is not None: # draw if human 3d position is available
+        human_pos = human_pos.tolist()
+        # add neck position (center of shoulders)
+        neck_x = (human_pos[3][0] + human_pos[4][0])/2
+        neck_y = (human_pos[3][1] + human_pos[4][1])/2
+        neck_z = (human_pos[3][2] + human_pos[4][2])/2
+        human_pos.append([neck_x, neck_y, neck_z])
+        p3ds = human_pos
+        for _c in human_joint_connections:
+            ax.plot(xs = [p3ds[_c[0]][0], p3ds[_c[1]][0]], 
+                    ys = [p3ds[_c[0]][1], p3ds[_c[1]][1]], 
+                    zs = [p3ds[_c[0]][2], p3ds[_c[1]][2]], 
+                    c = (235,206,135))
+    ax.view_init(elev=20, azim=-150)
+    ax.set_xlim3d(0, 1)
+    ax.set_ylim3d(-0.5, 0.5)
+    ax.set_zlim3d(0, 1)
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('frame: {}'.format(num_str))
+    # plt.show()
+    fig.canvas.draw()
+    image_3d = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    image_3d = image_3d.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    image_3d = cv2.cvtColor(image_3d, cv2.COLOR_BGR2RGB)    
+    plt.close()
+    return image_3d
+
+def get_collision_index(robot_pos_3d, human_pos_3d, threshold=0.3):
+    # calculate Euclidean distance between each object's joints
+    robot_collision_index = []
+    human_collision_index = []
+    for r in range(len(robot_pos_3d)):
+        for h in range(len(human_pos_3d)):
+            distance = np.linalg.norm(robot_pos_3d[r]-human_pos_3d[h]) # Euclidean distance
+            if distance < threshold:
+                robot_collision_index.append(r)
+                human_collision_index.append(h)
+    return np.stack((robot_collision_index, human_collision_index)) # [2, num_collisions]
+
+def draw_lines_robot(image, p3d, cam_K, cam_RT, collision_index):
+    keypoints = []
+    for point_3d in p3d:
+        point_3d = np.append(point_3d, [1])
+        keypoint = cam_K @ cam_RT @ point_3d.reshape(-1,1)
+        keypoint /= keypoint[-1]
+        keypoints.append(keypoint)
+    joint_connections = [[0,1],[1,2],[2,3],[3,4],[4,5]]
+    keypoints = np.array(keypoints).reshape(-1,3)
+    for _c in joint_connections:
+        if _c[0] in collision_index[0,:] or _c[1] in collision_index[0,:]:
+            color=(0,0,255)
+        else:
+            color=(0,255,0)
+        cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color, thickness=2)
+    
+def draw_lines_human(image, p3d, cam_K, cam_RT, collision_index):
+    # draw human pose skeleton lines based on estimated 3d points
+    
+    # add neck position (center of shoulders)
+    neck_x = (p3d[3][0] + p3d[4][0])/2
+    neck_y = (p3d[3][1] + p3d[4][1])/2
+    neck_z = (p3d[3][2] + p3d[4][2])/2    
+    p3d = np.append(p3d, [[neck_x, neck_y, neck_z]], axis=0)
+    
+    keypoints = []
+    for point_3d in p3d:
+        point_3d = np.append(point_3d, [1])
+        keypoint = cam_K @ cam_RT @ point_3d.reshape(-1,1)
+        keypoint /= keypoint[-1]
+        keypoints.append(keypoint)
+        cv2.circle(image, (keypoint[0], keypoint[1]), radius=2, color=(255,255,255), thickness=2)
+    joint_connections = [[0,1], [0,2], [0,11], [11,3], [11,4], [3,5], [4,6], [5,7], [6,8], [3,9], [4,10], [9,10]]
+    keypoints = np.array(keypoints).reshape(-1,3)
+    
+    for _c in joint_connections:
+        if _c[0] in collision_index[1,:] or _c[1] in collision_index[1,:]:
+            color=(0,0,255)
+        else:
+            color=(235,206,135)
+        cv2.line(image, (int(keypoints[_c[0]][0]),int(keypoints[_c[0]][1])), (int(keypoints[_c[1]][0]),int(keypoints[_c[1]][1])), color, thickness=2)
+
+def get_robot_image(digital_twin, cam_K, cam_RT):
+    cam_K = cam_K.reshape(-1)
+    fov = digital_twin.fov*0.5
+    aspect = digital_twin.width/digital_twin.height
+    nearVal = 0.1
+    farVal = 10    
+    cam_K_opengl = np.array([[1/(aspect*np.tan(fov/2)), 0, 0, 0],
+                             [0, 1/np.tan(fov/2), 0, 0],
+                             [0, 0, (nearVal+farVal)/(nearVal-farVal), 2*nearVal*farVal/(nearVal-farVal)],
+                             [0, 0, -1, 0]]).reshape(-1)
+    cam_intrinsic = p.computeProjectionMatrixFOV(fov=fov*180/np.pi, # [view angle in degree]
+                                            aspect=digital_twin.width/digital_twin.height,
+                                            nearVal=0.1,
+                                            farVal=100,
+                                            )
+    cam_pos = -cam_RT[:,:3].transpose() @ cam_RT[:,-1]
+    cam_RT = cam_RT.transpose().reshape(-1)
+    
+    camera_struct_look_at_1 = {
+        'at':[0,0,0],
+        'up':[0,0,1],
+        'eye':cam_pos.tolist()
+    }
+    cam_extrinsic = p.computeViewMatrix(cameraEyePosition=camera_struct_look_at_1['eye'],
+                                cameraTargetPosition=camera_struct_look_at_1['at'],
+                                cameraUpVector=camera_struct_look_at_1['up'],
+                                )
+    print(cam_pos)
+    print(cam_extrinsic)
+    image_arr = p.getCameraImage(digital_twin.width,
+                            digital_twin.height,
+                            viewMatrix=cam_extrinsic,
+                            projectionMatrix=cam_intrinsic,
+                            shadow=1,
+                            lightDirection=[1, 1, 1],
+                            renderer=p.ER_BULLET_HARDWARE_OPENGL, #p.ER_TINY_RENDERER, #p.ER_BULLET_HARDWARE_OPENGL
+                            physicsClientId=digital_twin.physicsClient_main
+                            )
+
+
+    image = np.array(image_arr[2]) # [height, width, 4]
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    mask = np.array(image_arr[4])
+    cv2.imwrite('sample.jpg', image)
+    print(mask.shape)
 
 def get_pck_score(kps_pred, kps_gt, thresholds):    
     # PCK: Percentage of Correct Keypoints with in threshold pixel

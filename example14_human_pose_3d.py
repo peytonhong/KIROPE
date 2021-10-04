@@ -172,13 +172,18 @@ def main(args):
     # [nose, L-eye, R-eye, L-ear, R-ear, L-shoulder, R-shoulder, L-elbow, R-elbow, L-wrist, R-wrist, L-pelvis, R-pelvis, L-knee, R-knee, L-ankle, R-ankle]
     joint_interest = [0,1,2,5,6,7,8,9,10,11,12] # [nose, L-eye, R-eye, L-shoulder, R-shoulder, L-elbow, R-elbow, L-wrist, R-wrist, L-pelvis, R-pelvis]
     
+    DL_time_array = []
+    DLT_time_array = []
     
     for frame_i, (image_path_1, image_path_2) in enumerate(zip(im_list_1, im_list_2)):
         image_1 = cv2.imread(image_path_1)
         image_2 = cv2.imread(image_path_2)
         t = time.time()
         kps_1 = get_keypoint(predictor, image_1)
+        DL_time = time.time() - t
+        DL_time_array.append(DL_time)
         kps_2 = get_keypoint(predictor, image_2)
+        t = time.time()
         if len(kps_1) > 0 and len(kps_2) > 0: # if keypoints are detected in both images
             kps_1 = kps_1[joint_interest] # [9,3] joints with interest (3: x, y, score)        
             kps_2 = kps_2[joint_interest] # [9,3] joints with interest (3: x, y, score)        
@@ -190,13 +195,19 @@ def main(args):
             kps_1 = kps_1.tolist()
             kps_2 = kps_2.tolist()
             joints_3d = joints_3d.tolist()
+            DLT_time = time.time() - t
+            DLT_time_array.append(DLT_time)
             make_annotation_file(get_annotation_path(data_path, frame_i), kps_1, kps_2, joints_3d)
         else:
             kps_1 = []
             kps_2 = []
             joints_3d = []
         
-        print('Frame {} processed in {:.3f}s'.format(frame_i, time.time() - t))
+        print('Frame {} processed in {:.4f}s'.format(frame_i, time.time() - t))
+    print(f'Deep Learning time: {np.mean(DL_time_array):.4f}s')
+    print(f'DLT time: {np.mean(DLT_time_array):.4f}s')
+    total_time = np.mean(DL_time_array) + np.mean(DLT_time_array)
+    print(f'Total time: {total_time:.4f}s, {1/total_time:.3f}FPS')
 
 if __name__ == '__main__':
     setup_logger()

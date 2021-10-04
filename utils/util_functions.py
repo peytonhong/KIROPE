@@ -216,14 +216,14 @@ def draw_3d_lines(robot_pos, human_pos, num_str):
             ax.plot(xs = [p3ds[_c[0]][0], p3ds[_c[1]][0]], 
                     ys = [p3ds[_c[0]][1], p3ds[_c[1]][1]], 
                     zs = [p3ds[_c[0]][2], p3ds[_c[1]][2]], 
-                    c = (235,206,135))
+                    c = 'blue')
     ax.view_init(elev=20, azim=-150)
     ax.set_xlim3d(0, 1)
     ax.set_ylim3d(-0.5, 0.5)
     ax.set_zlim3d(0, 1)
     plt.xlabel('X')
     plt.ylabel('Y')
-    plt.title('frame: {}'.format(num_str))
+    plt.title('frame: {}'.format(num_str))    
     # plt.show()
     fig.canvas.draw()
     image_3d = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)

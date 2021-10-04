@@ -26,6 +26,8 @@ from utils.util_functions import create_belief_map, extract_keypoints_from_belie
 from utils.util_functions import visualize_result_two_cams, visualize_result_robot_human_two_cams
 from utils.util_functions import get_pck_score, get_add_score, save_metric_json
 from glob import glob
+import time
+
 def str2bool(v):
     # Converts True or False for argparse
     if isinstance(v, bool):
@@ -125,11 +127,13 @@ def test(args, model, dataset, device, digital_twin):
     files = glob('visualization_result/*.jpg')
     for f in files:
         os.remove(f)
-
+    DL_time_array = []
+    DT_time_array = []
     with torch.no_grad():
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
-            image_1 = sampled_batch['image_1'].to(device) # tensor [N, 3, 480, 640]
-            image_2 = sampled_batch['image_2'].to(device) # tensor [N, 3, 480, 640]
+            time_begin = time.time()
+            image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
+            image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
             gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
             gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]     
             keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
@@ -142,8 +146,8 @@ def test(args, model, dataset, device, digital_twin):
             cam_RT_2 = np.array(sampled_batch['cam_RT_2'])
 
             if iter == 0:
-                pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1).to(device) # [N, 9, 480, 640]
-                pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2).to(device) # [N, 9, 480, 640]
+                pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1) # [N, 9, 480, 640]
+                pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2) # [N, 9, 480, 640]
         
             image_beliefmap_stack_1 = torch.cat((image_1, pred_belief_maps_1), dim=1) # [N, 9, 480, 640]
             image_beliefmap_stack_2 = torch.cat((image_2, pred_belief_maps_2), dim=1) # [N, 9, 480, 640]
@@ -158,8 +162,13 @@ def test(args, model, dataset, device, digital_twin):
             loss = F.mse_loss(output['pred_belief_maps'], gt_belief_maps)            
             test_loss_sum += loss.item()*args.batch_size*2
             num_tested_data += args.batch_size*2
+            
+            DL_time = time.time() - time_begin
+            DL_time_array.append(DL_time)
+            
 
             if args.digital_twin:                
+                time_begin = time.time()
                 pred_kps_1, pred_kps_2 = digital_twin.forward(
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().detach().numpy()), 
                                             extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().detach().numpy()), 
@@ -170,8 +179,11 @@ def test(args, model, dataset, device, digital_twin):
                 #                             tuple(keypoints_GT_2, np.ones_like(keypoints_GT_2)),
                 #                             sampled_batch
                 #                             )
-                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0).to(device)
-                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0).to(device)
+                DT_time = time.time() - time_begin            
+                DT_time_array.append(DT_time)
+                
+                pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0)
+                pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0)
                 visualize_result_robot_human_two_cams(
                                 sampled_batch['image_path_1'][0], 
                                 pred_kps_1, 
@@ -183,8 +195,9 @@ def test(args, model, dataset, device, digital_twin):
                                 cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
                                 is_kp_normalized=False
                                 )
-                add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)
+                add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)                
                 add_scores.append(add_score)
+                
                 
             else:
                 pred_kps_1, _ = extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy())
@@ -202,7 +215,7 @@ def test(args, model, dataset, device, digital_twin):
                                 )
             pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, pck_thresholds)
             pck_scores.append(pck_score)            
-            
+
             if iter == 488:
                 save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'test_cam1')
                 save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
@@ -215,10 +228,17 @@ def test(args, model, dataset, device, digital_twin):
         test_loss_sum /= num_tested_data
         pck_scores = np.mean(pck_scores, axis=0)        
         save_metric_json(pck_thresholds, pck_scores, 'PCK')
+        
+        print(f'Deep Learning time: {np.mean(DL_time_array):.3f}s', )
+        
         if args.digital_twin:
             add_scores = np.mean(add_scores, axis=0)
             save_metric_json(add_thresholds, add_scores, 'ADD')
 
+            print(f'Digital Twin time: {np.mean(DT_time_array):.3f}s')
+            DLDT_time = np.mean(DL_time+DT_time)
+            print(f'Total time: {DLDT_time:.3f}s, {1/DLDT_time:.3f}FPS')
+            
     return test_loss_sum
 
 
@@ -256,7 +276,7 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     train_dataset = RobotDataset(data_dir='annotation/real/validation')
-    test_dataset = RobotDataset(data_dir='annotation/real/test_temp')
+    test_dataset = RobotDataset(data_dir='annotation/real/test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 

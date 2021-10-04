@@ -13,6 +13,7 @@ from tqdm import tqdm
 from glob import glob
 import cv2
 import csv
+import time
 
 class DigitalTwin():
 
@@ -123,8 +124,8 @@ class DigitalTwin():
         joint_angles_gt = sampled_batch['joint_angles'][0].numpy()
 
         # Joint PnP
-        self.jointAngles_jpnp_old = self.jointAngles_jpnp
-        self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))
+        self.jointAngles_jpnp_old = self.jointAngles_jpnp        
+        self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))        
         # self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
         self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
         

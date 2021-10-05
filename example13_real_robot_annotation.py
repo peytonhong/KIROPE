@@ -5,8 +5,8 @@ import json
 import pybullet as p
 from tqdm import tqdm
 
-data_path = 'annotation/real/test/20210819_025345_human/'
-cam_type = 'cam1'
+data_path = 'annotation/real/test/20211005_220303_human_validation/'
+cam_type = 'cam2'
 print(data_path + cam_type)
 
 def get_json_path(data_path, file_number):
@@ -61,7 +61,7 @@ def draw_axis(img, keypoints, imgpts):
     return img
 
 physicsClient = p.connect(p.DIRECT) # non-graphical version
-robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
+robotId = p.loadURDF("urdfs/ur3/ur3_gazebo_no_limit.urdf", [0, 0, 0], useFixedBase=True)
 
 basePose = p.getQuaternionFromEuler([0,0,np.pi])
 p.resetBasePositionAndOrientation(robotId, [0.4, -0.15, 0.0], basePose) # robot base offset(25cm) from checkerboard

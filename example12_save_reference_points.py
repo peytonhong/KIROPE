@@ -1,9 +1,9 @@
 import numpy as np
 import json
 
-keypoints_cam1 = np.array([45,315, 286,269, 468,353, 180,463])
+keypoints_cam1 = np.array([220,297, 472,295, 619,432, 201,447])
 
-keypoints_cam2 = np.array([117,430, 206,306, 469,310, 572,435])
+keypoints_cam2 = np.array([158,425, 232,301, 498,296, 621,416])
 
 # x_len = 0.05 #0.0438
 # y_len = 0.05 #0.044

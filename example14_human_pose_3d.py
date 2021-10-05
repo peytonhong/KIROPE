@@ -153,7 +153,7 @@ def main(args):
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(args.cfg)
     predictor = DefaultPredictor(cfg)
     
-    data_path = 'annotation/real/test/20210819_025345_human/'
+    data_path = 'annotation/real/test/20211005_220303_human_validation/'
     im_list_1 = sorted(glob.glob(data_path + 'cam1/*.jpg'))
     im_list_2 = sorted(glob.glob(data_path + 'cam2/*.jpg'))
     json_list_1 = sorted(glob.glob(data_path + 'cam1/*.json'))

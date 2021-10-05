@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 import cv2
 
-data_path = 'annotation/real/test/20210819_025345_human/'
+data_path = 'annotation/real/test/20211005_220303_human_validation/'
 human_pose_path = os.path.join(data_path, 'human_pose')
 human_pose_json_path = sorted(glob(os.path.join(human_pose_path, '*.json')))
 cam1_path = data_path + 'cam1'
@@ -28,10 +28,10 @@ ax = fig.add_subplot(111, projection='3d')
 
 # fig.clear()
 
-for frame_i, human_pose_json_path in enumerate(human_pose_json_path):
+for human_pose_json_path in human_pose_json_path:
     with open(human_pose_json_path, 'r') as json_file:
         human_pose_json = json.load(json_file)
-        
+    frame_i = int(human_pose_json_path[-9:-5])
     joint_keypoints_1 = human_pose_json['joint_keypoints_1']
     joint_keypoints_2 = human_pose_json['joint_keypoints_2']
     joint_3d_positions = human_pose_json['joint_3d_positions']

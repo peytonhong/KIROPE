@@ -126,6 +126,7 @@ class DigitalTwin():
         # Joint PnP
         self.jointAngles_jpnp_old = self.jointAngles_jpnp        
         self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, self.X[:self.numJoints].reshape(-1))        
+        # self.jointAngles_jpnp, iter = self.joint_pnp_single_cam(target_keypoints_1, self.X[:self.numJoints].reshape(-1))        
         # self.jointAngles_jpnp, iter = self.joint_pnp(target_keypoints, np.zeros(self.numJoints))
         self.jointAngles_jpnp[-1] = 0 # set zero angle for end-effector since it is not observable.
         
@@ -218,6 +219,38 @@ class DigitalTwin():
         # print(jointAngles_jpnp*180/np.pi)
         return jointAngles_jpnp, iter
 
+    def joint_pnp_single_cam(self, target_keypoints, jointAngles_jpnp):
+        jointAngles_init = jointAngles_jpnp.copy()
+        eps = 1e-6
+        # eps = np.linspace(1e-6, 1e-6, self.numJoints)
+        for iter in range(self.jpnp_max_iterations): #self.jpnp_max_iterations
+            # get joint 2d keypoint from 3d points and camera model
+            keypoints_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+            # keypoints_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+            keypoints = keypoints_1.reshape(-1) # [12]
+            # Jacobian approximation: keypoint rate (변화량)
+            Jacobian = np.zeros((self.numJoints*2, self.numJoints)) # [12, 6]
+            for col in range(self.numJoints):
+                eps_array = np.zeros(self.numJoints)
+                eps_array[col] = eps
+                keypoints_eps_1, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_1, self.cam_RT_1, self.distortion_1)
+                # keypoints_eps_2, _ = self.get_joint_keypoints_from_angles(jointAngles_jpnp+eps_array, self.robotId_jpnp, self.physicsClient_jpnp, self.cam_K_2, self.cam_RT_2, self.distortion_2)
+                keypoints_eps = keypoints_eps_1.reshape(-1) # [12]
+                Jacobian[:,col] = (keypoints_eps - keypoints)/eps
+            
+            dy = np.array(target_keypoints - keypoints)
+            dx = np.linalg.pinv(Jacobian)@dy
+            jointAngles_jpnp += dx # all joint angle update
+
+            jointAngles_jpnp = self.angle_wrapper(jointAngles_jpnp)
+            # criteria = np.abs( np.linalg.norm(dx) / np.linalg.norm(self.jointAngles_jpnp) )
+            criteria = np.linalg.norm(dy)               
+            # if criteria < 1.:
+            #     eps *= 0.99
+            if criteria < 1e-3:
+                break
+        # print(jointAngles_jpnp*180/np.pi)
+        return jointAngles_jpnp, iter
 
     # def joint_pnp_with_LM(self, target_keypoints, jointAngles_jpnp):
 

@@ -1,6 +1,7 @@
 import os 
 import subprocess 
 import math
+from PIL.Image import init
 import pybullet as p 
 import pkgutil
 import pybullet_data
@@ -13,14 +14,9 @@ import glob
 opt = lambda : None
 opt.width = 500
 opt.height = 500 
-opt.noise = False
-opt.nb_frames = 1000
+opt.nb_frames = 200
 opt.type = 'temp'
 opt.outf = f'annotation/{opt.type}'
-opt.random_objects = False
-opt.nb_objs = 30
-
- 
 
 # # # # # # # # # # # # # # # # # # # # # # # # #
 if os.path.isdir(opt.outf):
@@ -120,7 +116,7 @@ physicsClient = p.connect(p.DIRECT)
 # lets create a robot
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeUid = p.loadURDF("plane.urdf", [0, 0, -1])
-robotId = p.loadURDF("urdfs/ur3/ur3.urdf", [0, 0, 0], useFixedBase=True)
+robotId = p.loadURDF("urdfs/ur3/ur3_gazebo_no_limit.urdf", [0, 0, 0], useFixedBase=True)
 p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], [0, 0, 0, 1])
 
 # egl = pkgutil.get_loader('eglRenderer')
@@ -212,6 +208,14 @@ upper_limit = [p.getJointInfo(robotId, i)[9] for i in range(numJoints)]
 rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
 bgr_colors = rgb_colors[:, ::-1]
 
+initJointPoses = np.array([0, -1.57, 0, -1.57, 0, 0])
+for j in range(numJoints):
+    p.resetJointState(bodyUniqueId=robotId,
+                    jointIndex=j,
+                    targetValue=initJointPoses[j],
+                    )    
+    p.stepSimulation()
+
 # Lets run the simulation for a few steps. 
 for i in tqdm(range(int(opt.nb_frames))):
 # for i in range(100):
@@ -224,9 +228,11 @@ for i in tqdm(range(int(opt.nb_frames))):
         # if opt.type == 'train' and i%100 == 0: # refresh frequencies at every 100 frames
         #     signs = [np.random.choice([-1, 1]) for _ in range(numJoints)]
         #     freqs = np.random.rand(numJoints) + 0.2 # 0.2~1.2 [Hz]
-        targetJointPoses = [clamping(lower_limit[k], 1.0*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
-        # targetJointPoses[:3] = [0]*3
+        # targetJointPoses = [clamping(lower_limit[k], 1.0*signs[k]*np.sin(freqs[k]*t), upper_limit[k]) for k in range(numJoints)]
+        targetJointPoses = [np.sin(t) for k in range(numJoints)]        
+        # targetJointPoses[:4] = [0]*4
         # targetJointPoses[-1] = 0
+        targetJointPoses = np.array(targetJointPoses) + initJointPoses
         for j in range(numJoints):
             p.setJointMotorControl2(bodyIndex=robotId,
                                     jointIndex=j,
@@ -279,15 +285,39 @@ for i in tqdm(range(int(opt.nb_frames))):
         link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)
         pos_world = list(link_state[4])
         rot_world = link_state[5] # world orientation of the URDF link frame        
-        if link_num == 4:
+        if link_num == 0: # sholder
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0,-0.04,0.08535])
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
-        if link_num == 5:
+        if link_num == 1: # upper_arm
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0.0,0.0619,0])
+            offset = np.array([0,0,0.1198])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 2: # fore_arm
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,0.025])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 3: # wrist 1
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,-0.085])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 4: # wrist 2
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,-0.045,0])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 5: # wrist 3
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world)
         
@@ -303,6 +333,7 @@ for i in tqdm(range(int(opt.nb_frames))):
     
     image = np.hstack((image_1, image_2))
     cv2.imwrite(f'{opt.outf}/twocams/{str(i).zfill(5)}.png', image)
+    # cv2.imwrite(f'{opt.outf}/twocams/{str(i).zfill(5)}.png', image_1)
 
     make_annotation_file(
     filename = f"{opt.outf}/cam1/{str(i).zfill(5)}.json",

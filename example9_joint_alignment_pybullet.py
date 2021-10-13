@@ -19,17 +19,17 @@ opt.height = 500
 opt.noise = False
 opt.frame_freq = 8
 opt.nb_frames = 10000
-opt.inputf1 = 'annotation/train/cam1'
-opt.inputf2 = 'annotation/train/cam2'
+opt.inputf1 = 'annotation/temp/cam1'
+opt.inputf2 = 'annotation/temp/cam2'
 opt.outf = 'joint_alignment'
-opt.idx = 9
+opt.idx = 112
 
 make_joint_sphere = False
 
 # # # # # # # # # # # # # # # # # # # # # # # # #
 if os.path.isdir(opt.outf):
     print(f'folder {opt.outf}/ exists')
-    existing_files = glob(f'{opt.outf}/*')
+    existing_files = glob(f'{opt.outf}/*.*')
     for f in existing_files:
         os.remove(f)
 else:
@@ -84,15 +84,39 @@ def get_joint_keypoints_from_angles(jointAngles, opt, cam_K, cam_R, robotId):
         link_state = p.getLinkState(bodyUniqueId=robotId, linkIndex=link_num)
         pos_world = list(link_state[4])
         rot_world = link_state[5] # world orientation of the URDF link frame
-        if link_num == 4:
+        if link_num == 0: # sholder
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0,-0.04,0.08535])
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
-        if link_num == 5:
+        if link_num == 1: # upper_arm
             rot_mat = p.getMatrixFromQuaternion(rot_world)
             rot_mat = np.array(rot_mat).reshape(3,3)
-            offset = np.array([0.0,0.0619,0])
+            offset = np.array([0,0,0.1198])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 2: # fore_arm
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,0.025])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 3: # wrist 1
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,-0.085])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 4: # wrist 2
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,-0.045,0])
+            # offset = np.array([0,0,0])
+            pos_world = rot_mat.dot(offset) + pos_world
+        if link_num == 5: # wrist 3
+            rot_mat = p.getMatrixFromQuaternion(rot_world)
+            rot_mat = np.array(rot_mat).reshape(3,3)
+            offset = np.array([0,0,0])
             pos_world = rot_mat.dot(offset) + pos_world
         joint_world_position.append(pos_world)        
     keypoints = get_my_keypoints(cam_K, cam_R, robotId=robotId, joint_world_position=joint_world_position, opt=opt)
@@ -111,13 +135,13 @@ def add_tuple(a, b):
     return tuple([sum(x) for x in zip(a, b)])
 
 # Setup bullet physics stuff
-seconds_per_step = 1.0 / 240.0
-frames_per_second = 30.0
+# seconds_per_step = 1.0 / 240.0
+# frames_per_second = 30.0
 
 physicsClient = p.connect(p.DIRECT) # non-graphical version
 
 # lets create a robot
-robotId = p.loadURDF("urdfs/ur3/ur3.urdf", [0, 0, 0], useFixedBase=True)
+robotId = p.loadURDF("urdfs/ur3/ur3_gazebo_no_limit.urdf", [0, 0, 0], useFixedBase=True)
 p.resetBasePositionAndOrientation(robotId, [0, 0, 0.0], [0, 0, 0, 1])
 
 numJoints = p.getNumJoints(robotId)
@@ -200,7 +224,9 @@ for iter in range(iterations):
     # dx = - np.linalg.inv(np.transpose(Jacobian)@Jacobian + lam*np.eye(numJoints)) @ np.transpose(Jacobian) @ dy # LM Algorithm
     # dx = dx.reshape(-1)
     # jointAngles_new = jointAngles + dx # all joint angle update
-    # keypoints_new = get_joint_keypoints_from_angles(jointAngles_new, opt, cam_K, cam_R, robotId)
+    # keypoints_new1 = get_joint_keypoints_from_angles(jointAngles_new, opt, cam_K, cam_R1, robotId)
+    # keypoints_new2 = get_joint_keypoints_from_angles(jointAngles_new, opt, cam_K, cam_R2, robotId)
+    # keypoints_new = np.vstack((keypoints_new1, keypoints_new2)).reshape(-1) # [24]
     # if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
     #     jointAngles += dx
     #     lam /= 10

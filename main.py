@@ -214,6 +214,7 @@ def test(args, model, dataset, device, digital_twin):
                                 is_kp_normalized=False
                                 )
             pck_score = get_pck_score(pred_kps_1, keypoints_GT_1, pck_thresholds)
+            
             pck_scores.append(pck_score)            
 
             if iter == 488:

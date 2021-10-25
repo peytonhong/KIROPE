@@ -22,7 +22,7 @@ opt.nb_frames = 10000
 opt.inputf1 = 'annotation/temp/cam1'
 opt.inputf2 = 'annotation/temp/cam2'
 opt.outf = 'joint_alignment'
-opt.idx = 112
+opt.idx = 167
 
 make_joint_sphere = False
 
@@ -229,7 +229,7 @@ for iter in range(iterations):
     # keypoints_new = np.vstack((keypoints_new1, keypoints_new2)).reshape(-1) # [24]
     # if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
     #     jointAngles += dx
-    #     lam /= 10
+    #     lam *= 1/10
     # else:
     #     lam *= 10
     #     # continue

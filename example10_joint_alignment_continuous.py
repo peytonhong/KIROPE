@@ -190,7 +190,8 @@ for idx in tqdm(range(len(label_paths1))):
     target_keypoints = np.array([target_keypoints[i][j] for i in range(len(target_keypoints)) for j in range(2)])  # [24]
 
     # print('target_keypoints: ', target_keypoints)
-    
+    # jointAngles = np.zeros(numJoints)
+
     eps = 1e-6 # epsilon for Jacobian approximation
     # eps = np.linspace(1e-6, 1e-6, numJoints)
     iterations = 100 # This value can be adjusted.
@@ -227,7 +228,8 @@ for idx in tqdm(range(len(label_paths1))):
         # jointAngles_new = jointAngles + dx # all joint angle update
         # keypoints_new1 = get_joint_keypoints_from_angles(jointAngles_new, opt, cam_K, cam_R1, robotId)
         # keypoints_new2 = get_joint_keypoints_from_angles(jointAngles_new, opt, cam_K, cam_R2, robotId)
-        # keypoints_new = np.vstack((keypoints_new1, keypoints_new2)).reshape(-1) # [24]
+        # # keypoints_new = np.vstack((keypoints_new1, keypoints_new2)).reshape(-1) # [24]
+        # keypoints_new = keypoints_new1.reshape(-1) # [12] for single cam use
         # if np.linalg.norm(target_keypoints - keypoints_new) < np.linalg.norm(target_keypoints - keypoints): # accepted
         #     jointAngles += dx
         #     lam /= 10

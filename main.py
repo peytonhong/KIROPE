@@ -27,6 +27,7 @@ from utils.util_functions import visualize_result_two_cams, visualize_result_rob
 from utils.util_functions import get_pck_score, get_add_score, save_metric_json
 from glob import glob
 import time
+import json
 
 def str2bool(v):
     # Converts True or False for argparse
@@ -129,6 +130,7 @@ def test(args, model, dataset, device, digital_twin):
         os.remove(f)
     DL_time_array = []
     DT_time_array = []
+    # angle_save = []
     with torch.no_grad():
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             time_begin = time.time()
@@ -166,7 +168,7 @@ def test(args, model, dataset, device, digital_twin):
             DL_time = time.time() - time_begin
             DL_time_array.append(DL_time)
             
-
+            
             if args.digital_twin:                
                 time_begin = time.time()
                 pred_kps_1, pred_kps_2 = digital_twin.forward(
@@ -193,11 +195,13 @@ def test(args, model, dataset, device, digital_twin):
                                 keypoints_GT_2,
                                 digital_twin,
                                 cam_K_1[0], cam_RT_1[0], cam_K_2[0], cam_RT_2[0],
-                                is_kp_normalized=False
+                                is_kp_normalized=False,
+                                iter=iter
                                 )
                 add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)                
                 add_scores.append(add_score)
-                
+
+                # angle_save.append((digital_twin.jointAngles_main*180/np.pi).tolist())
                 
             else:
                 pred_kps_1, _ = extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy())
@@ -223,7 +227,10 @@ def test(args, model, dataset, device, digital_twin):
             # if iter == 280:
             #     save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
             #     break
-                        
+
+        # with open('visualization_result/metrics/angle_save_KF.json','w') as json_file:
+        #     json.dump(angle_save, json_file)
+
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         
         test_loss_sum /= num_tested_data

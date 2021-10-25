@@ -137,7 +137,7 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
                             image_path_2, pred_keypoints_2, gt_keypoints_2, 
                             digital_twin,
                             cam_K_1, cam_RT_1, cam_K_2, cam_RT_2,
-                            is_kp_normalized):
+                            is_kp_normalized, iter=None):
     # visualize the joint position prediction wih ground truth for one sample
     # pred_kps, gt_kps: [numJoints, 2(w,h order)]
     rgb_colors = np.array([[87, 117, 144], [67, 170, 139], [144, 190, 109], [249, 199, 79], [248, 150, 30], [243, 114, 44], [249, 65, 68]]) # rainbow-like
@@ -187,7 +187,10 @@ def visualize_result_robot_human_two_cams(image_path_1, pred_keypoints_1, gt_key
     image_stack = np.hstack((image_2, image_3d, image_1))
     cv2.putText(image_stack, 'CAM1', (width*2+10,30), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
     cv2.putText(image_stack, 'CAM2', (10,30),       fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255,255,255), thickness=2)
-    cv2.imwrite(f'visualization_result/stacked_{image_path_1[-8:]}', image_stack)
+    if iter is None:
+        cv2.imwrite(f'visualization_result/stacked_{image_path_1[-8:]}', image_stack)
+    else:
+        cv2.imwrite(f'visualization_result/stacked_{iter:04d}.jpg', image_stack)
     
     # get_robot_image(digital_twin, cam_K_2, cam_RT_2)
     

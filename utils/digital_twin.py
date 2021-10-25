@@ -149,7 +149,7 @@ class DigitalTwin():
         self.jointVelocities_main = self.X[self.numJoints:].reshape(-1)
         # print(KF, self.jointAngles_jpnp[4]*180/np.pi, self.X[4]*180/np.pi)    
         
-        jointAngle_command = self.jointAngles_main
+        jointAngle_command = self.jointAngles_main # should be jointAngles_main
         
         # PyBullet main simulation update
         # steps_per_frame = math.ceil( 1.0 / (self.seconds_per_step * self.frames_per_second) ) # 8 steps per frame

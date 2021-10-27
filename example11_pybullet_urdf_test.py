@@ -9,7 +9,7 @@ physicsClient = p.connect(p.GUI)
 
 p.setAdditionalSearchPath(pybullet_data.getDataPath())
 planeUid = p.loadURDF("plane.urdf", [0, 0, -0.1])
-robotId = p.loadURDF("urdfs/ur3/ur3_gazebo.urdf", [0, 0, 0], useFixedBase=True)
+robotId = p.loadURDF("urdfs/ur3/ur3_gazebo_no_limit.urdf", [0, 0, 0], useFixedBase=True)
 p.resetBasePositionAndOrientation(robotId, [0.4, -0.15, 0.0], p.getQuaternionFromEuler([0,0,np.pi]))
 numJoints = p.getNumJoints(robotId)
 

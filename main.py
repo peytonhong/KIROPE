@@ -130,7 +130,8 @@ def test(args, model, dataset, device, digital_twin):
         os.remove(f)
     DL_time_array = []
     DT_time_array = []
-    # angle_save = []
+    angle_save = []
+    angle_gt_save = []
     with torch.no_grad():
         for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
             time_begin = time.time()
@@ -201,7 +202,8 @@ def test(args, model, dataset, device, digital_twin):
                 add_score = get_add_score(digital_twin.jointWorldPosition_pred, digital_twin.jointWorldPosition_gt, add_thresholds)                
                 add_scores.append(add_score)
 
-                # angle_save.append((digital_twin.jointAngles_main*180/np.pi).tolist())
+                angle_save.append((digital_twin.jointAngles_main*180/np.pi).tolist())
+                angle_gt_save.append((sampled_batch['joint_angles'][0]*180/np.pi).tolist())
                 
             else:
                 pred_kps_1, _ = extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().numpy())
@@ -228,8 +230,9 @@ def test(args, model, dataset, device, digital_twin):
             #     save_belief_map_images(output['pred_belief_maps'][1].cpu().detach().numpy(), 'test_cam2')
             #     break
 
-        # with open('visualization_result/metrics/angle_save_KF.json','w') as json_file:
-        #     json.dump(angle_save, json_file)
+        angle_result = {'angle_save': angle_save, 'angle_gt_save': angle_gt_save}
+        with open('visualization_result/metrics/angle_save_KF.json','w') as json_file:
+            json.dump(angle_result, json_file)
 
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())
         

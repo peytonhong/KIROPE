@@ -231,7 +231,7 @@ def test(args, model, dataset, device, digital_twin):
             #     break
 
         angle_result = {'angle_save': angle_save, 'angle_gt_save': angle_gt_save}
-        with open('visualization_result/metrics/angle_save_KF.json','w') as json_file:
+        with open('visualization_result/metrics/angle_save_robot_KF.json','w') as json_file:
             json.dump(angle_result, json_file)
 
         # visualize_state_embeddings(state_embeddings[0].cpu().numpy())

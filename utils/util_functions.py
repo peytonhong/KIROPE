@@ -454,3 +454,15 @@ def augmentation_recovery(keypoint_aug, aug_param):
     kps_recovered = scale_inv(keypoints=kps_recovered)
 
     return kps_recovered.to_xy_array()
+
+def draw_loss_record(loss_record):
+    loss_record = np.array(loss_record)
+    plt.figure()
+    plt.plot(loss_record[:,0], label='Train Loss', marker='o')
+    plt.plot(loss_record[:,1], label='Test Loss', marker='o')
+    plt.grid()
+    plt.legend()
+    plt.title('Loss Record')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.savefig('loss_record.png')

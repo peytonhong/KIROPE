@@ -24,7 +24,7 @@ from kirope_model import KIROPE_Attention, KIROPE_Transformer, ResnetSimple
 from utils.digital_twin import DigitalTwin
 from utils.util_functions import create_belief_map, extract_keypoints_from_belief_maps, save_belief_map_images
 from utils.util_functions import visualize_result_two_cams, visualize_result_robot_human_two_cams
-from utils.util_functions import get_pck_score, get_add_score, save_metric_json
+from utils.util_functions import get_pck_score, get_add_score, save_metric_json, draw_loss_record
 from glob import glob
 import time
 import json
@@ -271,6 +271,7 @@ def main(args):
     else:
         device = 'cpu'
     
+    loss_record = []
     if args.resume:
         # model = torch.load(model_path)
         checkpoint = torch.load(model_path, map_location=torch.device(device))
@@ -278,9 +279,10 @@ def main(args):
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         saved_epoch = checkpoint['epoch']
         test_loss = checkpoint['loss']
+        loss_record = checkpoint['loss_record']
     else:
         saved_epoch = 0
-            
+
     
     # print(model)
 
@@ -306,6 +308,10 @@ def main(args):
             test_loss = test(args, model, test_iterator, device, DT_test) # include visulaization result checking
             summary_note = f'Epoch: {epoch:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
+            loss_record.append([train_loss, test_loss])
+            draw_loss_record(loss_record)
+            with open('loss_record.json', 'w') as json_file:
+                json.dump(loss_record, json_file)
             if best_test_loss > test_loss:
                 best_test_loss = test_loss
                 # torch.save(model, model_path)
@@ -314,6 +320,7 @@ def main(args):
                     'model_state_dict': model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': test_loss,
+                    'loss_record': loss_record,
                     }, model_path)
             DT_train.zero_joint_state()
             DT_test.zero_joint_state()

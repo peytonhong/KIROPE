@@ -240,15 +240,15 @@ def test(args, model, dataset, device, digital_twin):
         pck_scores = np.mean(pck_scores, axis=0)        
         save_metric_json(pck_thresholds, pck_scores, 'PCK')
         
-        print(f'Deep Learning time: {np.mean(DL_time_array):.3f}s', )
+        # print(f'Deep Learning time: {np.mean(DL_time_array):.3f}s', )
         
         if args.digital_twin:
             add_scores = np.mean(add_scores, axis=0)
             save_metric_json(add_thresholds, add_scores, 'ADD')
 
-            print(f'Digital Twin time: {np.mean(DT_time_array):.3f}s')
+            # print(f'Digital Twin time: {np.mean(DT_time_array):.3f}s')
             DLDT_time = np.mean(DL_time+DT_time)
-            print(f'Total time: {DLDT_time:.3f}s, {1/DLDT_time:.3f}FPS')
+            # print(f'Total time: {DLDT_time:.3f}s, {1/DLDT_time:.3f}FPS')
             
     return test_loss_sum
 
@@ -257,37 +257,35 @@ def main(args):
     """
     There are two main components:
     * a convolutional backbone - we use ResNet-50
-    * a Transformer - we use the default PyTorch nn.TransformerEncoder, nn.TransformerDecoder
+    * an autoencoder to create keypoint beliefmap
     """
     
-    # hidden_dim = 256 # fixed for state embiddings
-    lr = 1e-4           # learning rate
+    lr = 1e-3           # learning rate
     model_path = './checkpoints/model_best.pth.tar'
-    # model_path = "checkpoints/attention_model/attention_normal.tar"
-
-    # model = KIROPE_Attention(num_joints=6, hidden_dim=hidden_dim)
-    # model = KIROPE_Transformer(num_joints=7, hidden_dim=hidden_dim)
+    model = ResnetSimple(num_joints=6)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    
     if torch.cuda.is_available(): # for multi gpu compatibility
-        device = 'cuda'
+        device = 'cuda'        
+        model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device)
     else:
         device = 'cpu'
-
+    
     if args.resume:
-        model = torch.load(model_path)
+        # model = torch.load(model_path)
+        checkpoint = torch.load(model_path, map_location=torch.device(device))
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        saved_epoch = checkpoint['epoch']
+        test_loss = checkpoint['loss']
     else:
-        model = ResnetSimple(num_joints=6)
-        if torch.cuda.is_available(): # for multi gpu compatibility
-            device = 'cuda'        
-            model = nn.DataParallel(model, device_ids=list(range(torch.cuda.device_count()))).to(device)
+        saved_epoch = 0
+            
+    
     # print(model)
 
-    # for param in model.module.backbone.parameters():
-    #     param.requires_grad = False
-        
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-
-    train_dataset = RobotDataset(data_dir='annotation/real/validation')
-    test_dataset = RobotDataset(data_dir='annotation/real/test')
+    train_dataset = RobotDataset(data_dir='annotation/real/short_test')
+    test_dataset = RobotDataset(data_dir='annotation/real/short_test')
     train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
@@ -295,34 +293,41 @@ def main(args):
     DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
 
     if args.command == 'train':
-        # CHECKPOINT_DIR
-        CHECKPOINT_DIR = 'checkpoints'
         try:
-            os.mkdir(CHECKPOINT_DIR)
+            os.mkdir('checkpoints')
         except(FileExistsError):
             pass
 
         best_test_loss = float('inf')
         
-        for e in range(args.num_epochs):
+        for epoch in range(args.num_epochs):
+            epoch += saved_epoch
             train_loss = train(args, model, train_iterator, device, optimizer, DT_train)           
             test_loss = test(args, model, test_iterator, device, DT_test) # include visulaization result checking
-            summary_note = f'Epoch: {e:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
+            summary_note = f'Epoch: {epoch:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
-            # subprocess.call(['ffmpeg', '-y', '-framerate', '10', '-i', r"stacked_%04d.jpg",  f'videos/epoch_{e:04d}.gif'], cwd=os.path.realpath('visualization_result'))
             if best_test_loss > test_loss:
                 best_test_loss = test_loss
-                torch.save(model, model_path)
+                # torch.save(model, model_path)
+                torch.save({
+                    'epoch': epoch+1,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'loss': test_loss,
+                    }, model_path)
             DT_train.zero_joint_state()
             DT_test.zero_joint_state()
 
     else: # evaluate mode        
-        model = torch.load(model_path)
+        # model = torch.load(model_path)
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(checkpoint['model_state_dict'])        
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        # epoch = checkpoint['epoch']
+        # test_loss = checkpoint['loss']
+        model.eval() # deactivate dropout or batch normalization for test session
         test_loss = test(args, model, test_iterator, device, DT_test)
         print(f'Test Loss: {test_loss:.10f}')
-
-
-
 
 if __name__ == '__main__':
     

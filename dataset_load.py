@@ -36,6 +36,7 @@ class RobotDataset(Dataset):
         return len(self.image_paths_1)
 
     def __getitem__(self, idx):
+        print("idx:", idx)
         image_path_1 = self.image_paths_1[idx]
         image_path_2 = self.image_paths_2[idx]
         image_1 = Image.open(image_path_1).convert('RGB') # [w, h]

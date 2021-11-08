@@ -459,7 +459,7 @@ def draw_loss_record(loss_record):
     loss_record = np.array(loss_record)
     plt.figure()
     plt.plot(loss_record[:,0], label='Train Loss', marker='o')
-    plt.plot(loss_record[:,1], label='Test Loss', marker='o')
+    plt.plot(loss_record[:,1], label='Validation Loss', marker='o')
     plt.grid()
     plt.legend()
     plt.title('Loss Record')

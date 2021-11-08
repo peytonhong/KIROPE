@@ -57,13 +57,14 @@ def argparse_args():
 
 
 def train(args, model, dataset_iterator, device, optimizer, digital_twin):
-
+    
     model.train()
 
     train_loss_sum = 0
     num_trained_data = 0    
 
     for iter, sampled_batch in enumerate(tqdm(dataset_iterator, desc=f"Training with batch size ({args.batch_size})")):
+        
         image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
         image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
         gt_belief_maps_1 = sampled_batch['belief_maps_1'] # [N, 6, 480, 640]
@@ -288,7 +289,9 @@ def main(args):
 
     train_dataset = RobotDataset(data_dir='annotation/real/short_test')
     test_dataset = RobotDataset(data_dir='annotation/real/short_test')
-    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False)
+    train_seq_sampler = torch.utils.data.SequentialSampler(train_dataset)
+    train_sampler = torch.utils.data.BatchSampler(train_seq_sampler, batch_size=args.batch_size, drop_last=True)
+    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False, sampler=train_sampler)
     test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
 
     DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")

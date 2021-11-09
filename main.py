@@ -58,7 +58,7 @@ def argparse_args():
 
 def train(args, model, train_dataset, device, optimizer, digital_twin_list):
     # create Dataset Subset for sequenced batch
-    sequence_length = 100
+    sequence_length = 500
     dir_numbers = np.random.choice(len(train_dataset.sub_dirs), args.batch_size)
     
     subset_list = []

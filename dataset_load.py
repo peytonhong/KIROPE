@@ -13,6 +13,16 @@ class RobotDataset(Dataset):
     """ Loading Robot Dataset for Pose Estimation"""
 
     def __init__(self, data_dir='annotation/real/train'):#, embed_dim=256):
+        self.sub_dirs = sorted(os.listdir(data_dir))
+        self.num_sub_dir_files = []
+        self.sub_dir_beginning_index = []
+        for sub_dir in self.sub_dirs:
+            self.num_sub_dir_files.append(len(glob(os.path.join(data_dir, sub_dir, 'cam1/*.jpg'))))
+        for i in range(len(self.sub_dirs)):
+            if i == 0:
+                self.sub_dir_beginning_index.append(0)    
+            self.sub_dir_beginning_index.append(self.sub_dir_beginning_index[i-1] + self.num_sub_dir_files[i-1])
+        
         self.image_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.jpg')))
         self.label_paths_1 = sorted(glob(os.path.join(data_dir, '*/cam1/*.json')))
         self.image_paths_2 = sorted(glob(os.path.join(data_dir, '*/cam2/*.jpg')))
@@ -36,7 +46,7 @@ class RobotDataset(Dataset):
         return len(self.image_paths_1)
 
     def __getitem__(self, idx):
-        print("idx:", idx)
+        # print("idx:", idx)
         image_path_1 = self.image_paths_1[idx]
         image_path_2 = self.image_paths_2[idx]
         image_1 = Image.open(image_path_1).convert('RGB') # [w, h]

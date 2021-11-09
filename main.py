@@ -56,14 +56,27 @@ def argparse_args():
 
 
 
-def train(args, model, dataset_iterator, device, optimizer, digital_twin):
+def train(args, model, train_dataset, device, optimizer, digital_twin_list):
+    # create Dataset Subset for sequenced batch
+    sequence_length = 100
+    dir_numbers = np.random.choice(len(train_dataset.sub_dirs), args.batch_size)
+    
+    subset_list = []
+    for i in dir_numbers:
+        sub_dir_range = range(train_dataset.sub_dir_beginning_index[i], 
+                              train_dataset.sub_dir_beginning_index[i] + train_dataset.num_sub_dir_files[i] - sequence_length + 1)
+        beginning_index = np.random.choice(sub_dir_range)
+        subset_list.append(np.arange(beginning_index, beginning_index+sequence_length))
+    subset_list = np.array(subset_list).transpose().reshape(-1) # for sequenced batch
+    dataset_subset = torch.utils.data.Subset(train_dataset, subset_list)
+    train_iterator = DataLoader(dataset=dataset_subset, batch_size=args.batch_size, shuffle=False, sampler=None)
     
     model.train()
 
     train_loss_sum = 0
     num_trained_data = 0    
 
-    for iter, sampled_batch in enumerate(tqdm(dataset_iterator, desc=f"Training with batch size ({args.batch_size})")):
+    for iter, sampled_batch in enumerate(tqdm(train_iterator, desc=f"Training with batch size ({args.batch_size})")):
         
         image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
         image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
@@ -71,13 +84,11 @@ def train(args, model, dataset_iterator, device, optimizer, digital_twin):
         gt_belief_maps_2 = sampled_batch['belief_maps_2'] # [N, 6, 480, 640]
         keypoints_GT_1 = sampled_batch['keypoints_GT_1'] # [N, 6, 2]
         keypoints_GT_2 = sampled_batch['keypoints_GT_2'] # [N, 6, 2]
-        keypoints_GT_1 = [[keypoints_GT_1[i][0].item(), keypoints_GT_1[i][1].item()] for i in range(len(keypoints_GT_1))]
-        keypoints_GT_2 = [[keypoints_GT_2[i][0].item(), keypoints_GT_2[i][1].item()] for i in range(len(keypoints_GT_2))]
-        
+        # keypoints_GT_1 = [[keypoints_GT_1[i][0].item(), keypoints_GT_1[i][1].item()] for i in range(len(keypoints_GT_1))]
+        # keypoints_GT_2 = [[keypoints_GT_2[i][0].item(), keypoints_GT_2[i][1].item()] for i in range(len(keypoints_GT_2))]
         if iter == 0:
             pred_belief_maps_1 = torch.zeros_like(gt_belief_maps_1) # [N, 9, 480, 640]
             pred_belief_maps_2 = torch.zeros_like(gt_belief_maps_2) # [N, 9, 480, 640]
-        
         image_beliefmap_stack_1 = torch.cat((image_1, pred_belief_maps_1), dim=1) # [N, 9, 480, 640]
         image_beliefmap_stack_2 = torch.cat((image_2, pred_belief_maps_2), dim=1) # [N, 9, 480, 640]
 
@@ -95,16 +106,21 @@ def train(args, model, dataset_iterator, device, optimizer, digital_twin):
         optimizer.step()
         
         if args.digital_twin:                
-            pred_kps_1, pred_kps_2 = digital_twin.forward(
-                                        extract_keypoints_from_belief_maps(output['pred_belief_maps'][0].cpu().detach().numpy()), 
-                                        extract_keypoints_from_belief_maps(output['pred_belief_maps'][1].cpu().detach().numpy()), 
-                                        sampled_batch
-                                        )
-            pred_belief_maps_1 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0)
-            pred_belief_maps_2 = torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0)
+            pred_belief_maps_1 = []
+            pred_belief_maps_2 = []
+            for i, digital_twin in enumerate(digital_twin_list):
+                pred_kps_1, pred_kps_2 = digital_twin.forward(
+                                            extract_keypoints_from_belief_maps(output['pred_belief_maps'][i].cpu().detach().numpy()), 
+                                            extract_keypoints_from_belief_maps(output['pred_belief_maps'][i+args.batch_size].cpu().detach().numpy()), 
+                                            sampled_batch
+                                            )
+                pred_belief_maps_1.append(torch.tensor(create_belief_map(image.shape[2:], pred_kps_1)).type(torch.FloatTensor).unsqueeze(0))
+                pred_belief_maps_2.append(torch.tensor(create_belief_map(image.shape[2:], pred_kps_2)).type(torch.FloatTensor).unsqueeze(0))
+            pred_belief_maps_1 = torch.vstack(tuple(pred_belief_maps_1[i] for i in range(args.batch_size)))
+            pred_belief_maps_2 = torch.vstack(tuple(pred_belief_maps_2[i] for i in range(args.batch_size)))
         else:
-            pred_belief_maps_1 = output['pred_belief_maps'][0].unsqueeze(0).detach()
-            pred_belief_maps_2 = output['pred_belief_maps'][1].unsqueeze(0).detach()
+            pred_belief_maps_1 = output['pred_belief_maps'][:args.batch_size].unsqueeze(0).detach()
+            pred_belief_maps_2 = output['pred_belief_maps'][args.batch_size:].unsqueeze(0).detach()
 
         if iter%100 == 0:
             save_belief_map_images(output['pred_belief_maps'][0].cpu().detach().numpy(), 'train_cam1')
@@ -134,7 +150,7 @@ def test(args, model, dataset, device, digital_twin):
     angle_save = []
     angle_gt_save = []
     with torch.no_grad():
-        for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size ({args.batch_size})")):
+        for iter, sampled_batch in enumerate(tqdm(dataset, desc=f"Testing with batch size (1)")):
             time_begin = time.time()
             image_1 = sampled_batch['image_1'] # tensor [N, 3, 480, 640]
             image_2 = sampled_batch['image_2'] # tensor [N, 3, 480, 640]
@@ -287,14 +303,12 @@ def main(args):
     
     # print(model)
 
-    train_dataset = RobotDataset(data_dir='annotation/real/short_test')
-    test_dataset = RobotDataset(data_dir='annotation/real/short_test')
-    train_seq_sampler = torch.utils.data.SequentialSampler(train_dataset)
-    train_sampler = torch.utils.data.BatchSampler(train_seq_sampler, batch_size=args.batch_size, drop_last=True)
-    train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False, sampler=train_sampler)
-    test_iterator = DataLoader(dataset=test_dataset, batch_size=args.batch_size, shuffle=False)
+    train_dataset = RobotDataset(data_dir='annotation/real/train')
+    test_dataset = RobotDataset(data_dir='annotation/real/test')
+    # train_iterator = DataLoader(dataset=train_dataset, batch_size=args.batch_size, shuffle=False, sampler=None)
+    test_iterator = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False)
 
-    DT_train = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
+    DT_train_list = [DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")]*args.batch_size
     DT_test = DigitalTwin(urdf_path="urdfs/ur3/ur3_gazebo_no_limit.urdf")
 
     if args.command == 'train':
@@ -307,7 +321,7 @@ def main(args):
         
         for epoch in range(args.num_epochs):
             epoch += saved_epoch
-            train_loss = train(args, model, train_iterator, device, optimizer, DT_train)           
+            train_loss = train(args, model, train_dataset, device, optimizer, DT_train_list)           
             test_loss = test(args, model, test_iterator, device, DT_test) # include visulaization result checking
             summary_note = f'Epoch: {epoch:3d}, Train Loss: {train_loss:.10f}, Test Loss: {test_loss:.10f}'
             print(summary_note)
@@ -325,7 +339,8 @@ def main(args):
                     'loss': test_loss,
                     'loss_record': loss_record,
                     }, model_path)
-            DT_train.zero_joint_state()
+            for DT_train in DT_train_list:
+                DT_train.zero_joint_state()
             DT_test.zero_joint_state()
 
     else: # evaluate mode        

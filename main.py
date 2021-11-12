@@ -277,7 +277,7 @@ def main(args):
     * an autoencoder to create keypoint beliefmap
     """
     
-    lr = 1e-3           # learning rate
+    lr = 1e-4           # learning rate
     model_path = './checkpoints/model_best.pth.tar'
     model = ResnetSimple(num_joints=6)
     optimizer = optim.Adam(model.parameters(), lr=lr)

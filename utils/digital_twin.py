@@ -99,15 +99,17 @@ class DigitalTwin():
         
         target_keypoints_1, confidences_1 = target_keypoints_and_confidences_1 # tuple
         target_keypoints_2, confidences_2 = target_keypoints_and_confidences_2 # tuple
+        # print(confidences_1)
+        # print(confidences_2)
         # target_keypoints_1 = target_keypoints_1*[self.width, self.height] # expand keypoint range to full width, height
         # target_keypoints_2 = target_keypoints_2*[self.width, self.height] # expand keypoint range to full width, height
         # Lets run the simulation for joint alignment. 
         # self.jointAngles_jpnp = self.jointAngles_main
         for i in range(self.numJoints):
             # if confidence score of a keypoint is below threshold, load previously estimated keypoint.
-            if confidences_1[i] < 0.9:
+            if confidences_1[i] < 0.75:
                 target_keypoints_1[i] = self.keypoints_1[i]
-            if confidences_2[i] < 0.9: 
+            if confidences_2[i] < 0.75: 
                 target_keypoints_2[i] = self.keypoints_2[i]
         
         target_keypoints_1 = [target_keypoints_1[i][j] for i in range(len(target_keypoints_1)) for j in range(2)]  # flatten to [12,]

@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from dataset_load import RobotDataset
 from torch.utils.data import DataLoader
+import time
 
 physicsClient = p.connect(p.GUI)
 
@@ -22,7 +23,9 @@ targetJointPoses = [0, -1.57, 0, -1.57, 0, 0]
 # targetJointPoses = [-0.014069859181539357, -1.5705331007586878, -0.004110638295308888, -1.5707600752459925, 0.004471239633858204, -0.011967484151021779]
 targetJointPoses = test_dataset[idx]['joint_angles']
 
+time_begin = time.time()
 while(1):
+# for i in range(100):
     for j in range(numJoints):
         p.setJointMotorControl2(bodyIndex=robotId,
                                 jointIndex=j,
@@ -35,6 +38,7 @@ while(1):
 
     p.stepSimulation()
     break
+
 
 def get_joint_keypoints_from_angles(jointAngles, bodyUniqueId, physicsClientId, cam_K, cam_RT, distortion):
     for j in range(len(jointAngles)):
